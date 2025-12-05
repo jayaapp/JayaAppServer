@@ -1,0 +1,106 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22]
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 2s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Set REDIS env
+        run: echo "REDIS_URL=redis://localhost:6379" >> $GITHUB_ENV
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Run cookie & CSRF Redis check
+        env:
+          REDIS_URL: redis://localhost:6379
+        run: NODE_ENV=test node tests/test_cookie_and_csrf_attrs.js
+
+  stripe-sandbox:
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ secrets.STRIPE_SECRET_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Stripe sandbox tests
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+        run: NODE_ENV=test node tests/test_stripe_sandbox.js
+
+  stripe-webhook-replay:
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ secrets.STRIPE_WEBHOOK_SECRET != '' && secrets.STRIPE_SECRET_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Stripe webhook replay test
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          REDIS_URL: redis://localhost:6379
+        run: NODE_ENV=test node tests/test_webhook_stripe_e2e.js
+      - name: Cookie & CSRF Redis sanity check
+        env:
+          REDIS_URL: redis://localhost:6379
+        run: NODE_ENV=test node tests/test_cookie_and_csrf_attrs.js
+
+  paypal-sandbox:
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ secrets.PAYPAL_CLIENT_ID != '' && secrets.PAYPAL_CLIENT_SECRET != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci
+      - name: Run PayPal sandbox tests
+        env:
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+          PAYPAL_MODE: sandbox
+        run: NODE_ENV=test node tests/test_paypal_sandbox.js
+      - name: Cookie & CSRF Redis sanity check
+        env:
+          REDIS_URL: redis://localhost:6379
+        run: NODE_ENV=test node tests/test_cookie_and_csrf_attrs.js
