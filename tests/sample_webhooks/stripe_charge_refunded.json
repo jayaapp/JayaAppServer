@@ -1,0 +1,12 @@
+{
+  "id": "evt_1_refund",
+  "type": "charge.refunded",
+  "data": {
+    "object": {
+      "id": "ch_EXAMPLE_REFUND",
+      "amount": 500,
+      "currency": "usd",
+      "refunds": { "data": [ { "id": "re_1" } ] }
+    }
+  }
+}

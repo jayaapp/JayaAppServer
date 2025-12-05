@@ -1,0 +1,9 @@
+{
+  "id": "WH-CAPTURE-1",
+  "event_type": "PAYMENT.CAPTURE.COMPLETED",
+  "resource": {
+    "id": "CAP-EXAMPLE-123",
+    "amount": { "currency_code": "USD", "value": "5.00" },
+    "order_id": "ORDER-WH-EXAMPLE-1"
+  }
+}

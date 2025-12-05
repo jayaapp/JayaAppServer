@@ -1,0 +1,14 @@
+{
+  "id": "evt_1_example",
+  "type": "payment_intent.succeeded",
+  "data": {
+    "object": {
+      "id": "pi_EXAMPLE_1",
+      "amount": 500,
+      "currency": "usd",
+      "charges": {
+        "data": [ { "id": "ch_EXAMPLE_1" } ]
+      }
+    }
+  }
+}

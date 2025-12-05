@@ -1,0 +1,28 @@
+{
+  "name": "jayaapp-server",
+  "version": "0.1.0",
+  "description": "Fastify backend for JayaApp (OAuth + donations + Ollama)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "NODE_ENV=development node src/index.js",
+    "lint": "",
+    "test": "node tests/test_oauth.js && node tests/test_db.js && node tests/test_logout_csrf.js && node tests/test_ollama_keys.js && node tests/test_ai_rate_limit.js && node tests/test_paypal_flow.js && node tests/test_paypal_webhook.js && node tests/test_idempotent_concurrent_create.js && node tests/test_cookie_and_csrf_attrs.js"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^7.1.0",
+    "@fastify/cors": "^8.2.0",
+    "@fastify/helmet": "^10.0.0",
+    "better-sqlite3": "^12.5.0",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.22.0",
+    "fastify-raw-body": "^4.0.0",
+    "fernet": "^0.3.3",
+    "ioredis": "^5.3.2",
+    "pino": "^8.20.0",
+    "uuid": "^9.0.0"
+  }
+}

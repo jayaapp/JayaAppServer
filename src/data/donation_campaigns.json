@@ -1,0 +1,62 @@
+{
+  "campaigns": [
+    {
+      "id": "words_analysis",
+      "active": true,
+      "order": 3,
+      "icon": "psychology",
+      
+      "title": {
+        "en": "Static AI Words Analysis Sponsorship",
+        "pl": "Sponsoring analizy statycznej słów SI"
+      },
+      
+      "description": {
+        "en": "Static words analysis currently is at {progress}% completion.",
+        "pl": "Statyczna analiza słów jest obecnie na {progress}% ukończenia."
+      },
+      
+      "progress_callback": "calculateWordsProgress",
+      
+      "target_amount_usd": 2000.00,
+      
+      "allow_exceed_target": false,
+      
+      "visibility_after_complete_days": 30,
+      
+      "completed_message": {
+        "en": "Campaign closed - Thank you for support! 🎉",
+        "pl": "Kampania zamknięta - Dziękujemy za wsparcie! 🎉"
+      }
+    },
+    {
+      "id": "verse_analysis",
+      "active": true,
+      "order": 4,
+      "icon": "segment",
+      
+      "title": {
+        "en": "Static AI Verse Analysis Sponsorship",
+        "pl": "Sponsoring analizy statycznej wersetów SI"
+      },
+      
+      "description": {
+        "en": "Static verse analysis is at {progress}% completion.",
+        "pl": "Statyczna analiza wersetów jest na {progress}% ukończenia."
+      },
+      
+      "progress_callback": "calculateSentencesProgress",
+      
+      "target_amount_usd": 3000.00,
+      
+      "allow_exceed_target": false,
+      
+      "visibility_after_complete_days": 30,
+      
+      "completed_message": {
+        "en": "Campaign closed - Thank you for support! 🎉",
+        "pl": "Kampania zamknięta - Dziękujemy za wsparcie! 🎉"
+      }
+    }
+  ]
+}
