@@ -27,21 +27,11 @@ async function routes(fastify, opts) {
 
   fastify.post('/api/ollama/proxy-chat', async (request, reply) => {
     // Require authentication and CSRF like reference
-    request.log.info({ 
-      hasAuth: !!request.headers.authorization,
-      hasCookie: !!(request.headers.cookie && request.headers.cookie.includes('session_token')),
-      hasCSRF: !!request.headers['x-csrf-token']
-    }, 'proxy-chat auth check');
-    
     if (typeof fastify.csrfProtection === 'function') {
       await fastify.csrfProtection(request, reply);
-      if (reply.sent) {
-        request.log.info('proxy-chat rejected by CSRF');
-        return;
-      }
+      if (reply.sent) return;
     }
     const authLogin = await getAuthenticatedUserLogin(request);
-    request.log.info({ authLogin }, 'proxy-chat auth result');
     if (!authLogin) {
       reply.code(401);
       return { status: 'error', message: 'unauthorized' };
@@ -66,7 +56,6 @@ async function routes(fastify, opts) {
     // Retrieve user's stored Ollama API key (like Python reference)
     const [keySuccess, ollamaApiKey, keyMessage] = getKey(authLogin);
     if (!keySuccess || !ollamaApiKey) {
-      request.log.info({ authLogin, keyMessage }, 'No Ollama API key found for user');
       reply.code(401);
       return { status: 'error', message: 'No API key configured. Please add your Ollama API key in settings.' };
     }
