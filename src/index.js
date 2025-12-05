@@ -33,16 +33,17 @@ const defaultRedact = [
 const extra = (config.SENSITIVE_KEYS || []).map(k => k).filter(Boolean);
 const redactPaths = defaultRedact.concat(extra.map(k => `payload.${k}`)).concat(extra.map(k => `req.headers.${k}`));
 
-// Configure logging: write to logs/server.log in production, stdout in development
+// Configure logging: write to logs/server.log (file transport for production)
 const logLevel = (config.LOG_LEVEL || 'info').toLowerCase();
-const logTarget = process.env.NODE_ENV === 'development' 
-  ? { target: 'pino-pretty', options: { colorize: true } }
-  : { target: 'pino/file', options: { destination: path.join(logsDir, 'server.log'), mkdir: true } };
+const logFile = path.join(logsDir, 'server.log');
 
 const logger = pino({
   level: logLevel,
   redact: { paths: redactPaths, censor: '***REDACTED***' },
-  transport: logTarget
+  transport: {
+    target: 'pino/file',
+    options: { destination: logFile, mkdir: true }
+  }
 });
 
 async function build() {
