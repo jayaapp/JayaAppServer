@@ -37,14 +37,20 @@ const logger = pino({
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-    // LiteSpeed/Passenger mode: listen on port 0 (auto-assigned socket)
-    // Standalone mode: use PORT env or default 3000
+    // LiteSpeed/Passenger mode detection:
+    // When run via lsnode/Passenger, PORT is not set and we should let 
+    // the underlying server listen without specifying port (Passenger injects socket)
     const usePassenger = !process.env.PORT && !process.env.JAYAAPP_PORT;
     
     if (usePassenger) {
-      const address = await app.listen({ port: 0, host: '0.0.0.0' });
-      logger.info(`Server listening (Passenger mode) at ${address}`);
+      // Passenger mode - get the raw server and call listen() with no args
+      // This allows Passenger to inject its socket/file descriptor
+      const server = app.server;
+      await app.ready();
+      server.listen();
+      logger.info('Server listening (Passenger mode)');
     } else {
+      // Standalone mode - use PORT env or default 3000
       const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
       await app.listen({ port, host: '0.0.0.0' });
       logger.info(`Server listening on port ${port}`);
