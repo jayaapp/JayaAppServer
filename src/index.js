@@ -1,10 +1,15 @@
 const path = require('path');
+const fs = require('fs');
 const fastify = require('fastify');
 const cookie = require('@fastify/cookie');
 const cors = require('@fastify/cors');
 const helmet = require('@fastify/helmet');
 const pino = require('pino');
 const config = require('./config');
+
+// Ensure logs directory exists
+const logsDir = path.join(__dirname, '..', 'logs');
+try { fs.mkdirSync(logsDir, { recursive: true }); } catch (e) {}
 
 // Default redact paths for common sensitive fields (headers, cookies, auth tokens)
 const defaultRedact = [
@@ -28,7 +33,17 @@ const defaultRedact = [
 const extra = (config.SENSITIVE_KEYS || []).map(k => k).filter(Boolean);
 const redactPaths = defaultRedact.concat(extra.map(k => `payload.${k}`)).concat(extra.map(k => `req.headers.${k}`));
 
-const logger = pino({ level: (config.LOG_LEVEL || 'info').toLowerCase(), redact: { paths: redactPaths, censor: '***REDACTED***' } });
+// Configure logging: write to logs/server.log in production, stdout in development
+const logLevel = (config.LOG_LEVEL || 'info').toLowerCase();
+const logTarget = process.env.NODE_ENV === 'development' 
+  ? { target: 'pino-pretty', options: { colorize: true } }
+  : { target: 'pino/file', options: { destination: path.join(logsDir, 'server.log'), mkdir: true } };
+
+const logger = pino({
+  level: logLevel,
+  redact: { paths: redactPaths, censor: '***REDACTED***' },
+  transport: logTarget
+});
 
 async function build() {
   const app = fastify({
