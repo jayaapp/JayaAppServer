@@ -27,14 +27,24 @@ async function routes(fastify, opts) {
 
   fastify.post('/api/ollama/proxy-chat', async (request, reply) => {
     // Require authentication and CSRF like reference
+    request.log.info({ 
+      hasAuth: !!request.headers.authorization,
+      hasCookie: !!(request.headers.cookie && request.headers.cookie.includes('session_token')),
+      hasCSRF: !!request.headers['x-csrf-token']
+    }, 'proxy-chat auth check');
+    
     if (typeof fastify.csrfProtection === 'function') {
       await fastify.csrfProtection(request, reply);
-      if (reply.sent) return;
+      if (reply.sent) {
+        request.log.info('proxy-chat rejected by CSRF');
+        return;
+      }
     }
     const authLogin = await getAuthenticatedUserLogin(request);
+    request.log.info({ authLogin }, 'proxy-chat auth result');
     if (!authLogin) {
       reply.code(401);
-      return { status: 'error', message: 'Authentication required' };
+      return { status: 'error', message: 'unauthorized' };
     }
     // Enforce per-IP AI limiter (mirrors Python reference)
     const aiLimiter = require('../plugins/aiRateLimit');
