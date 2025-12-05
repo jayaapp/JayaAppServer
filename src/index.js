@@ -131,8 +131,19 @@ if (require.main === module) {
     });
 
     try {
-      await app.listen({ port, host: '0.0.0.0' });
-      logger.info(`Server listening on port ${port}`);
+      // LiteSpeed/Passenger detection: when run via lsnode, PORT env is not set
+      // and the server should listen without specifying a port (Passenger provides a socket)
+      const usePassenger = !process.env.PORT && !process.env.JAYAAPP_PORT;
+      
+      if (usePassenger) {
+        // Passenger/lsnode mode - listen on auto-assigned socket
+        const address = await app.listen({ port: 0, host: '0.0.0.0' });
+        logger.info(`Server listening (Passenger mode) at ${address}`);
+      } else {
+        // Standalone mode - use configured port
+        await app.listen({ port, host: '0.0.0.0' });
+        logger.info(`Server listening on port ${port}`);
+      }
     } catch (err) {
       logger.error(err);
       process.exit(1);
