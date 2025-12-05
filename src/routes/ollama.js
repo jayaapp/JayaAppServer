@@ -63,10 +63,19 @@ async function routes(fastify, opts) {
       return { status: 'error', message: errMsg };
     }
 
-    // Build outgoing headers: forward Authorization and X-CSRF-Token if present
-    const forwardHeaders = { 'Content-Type': 'application/json' };
-    if (request.headers && request.headers.authorization) forwardHeaders['Authorization'] = request.headers.authorization;
-    if (request.headers && request.headers['x-csrf-token']) forwardHeaders['X-CSRF-Token'] = request.headers['x-csrf-token'];
+    // Retrieve user's stored Ollama API key (like Python reference)
+    const [keySuccess, ollamaApiKey, keyMessage] = getKey(authLogin);
+    if (!keySuccess || !ollamaApiKey) {
+      request.log.info({ authLogin, keyMessage }, 'No Ollama API key found for user');
+      reply.code(401);
+      return { status: 'error', message: 'No API key configured. Please add your Ollama API key in settings.' };
+    }
+
+    // Build outgoing headers: use user's stored Ollama API key
+    const forwardHeaders = { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ollamaApiKey}`
+    };
 
     // NOTE: we intentionally do not handle `enable_crowdsourcing` here yet.
 
