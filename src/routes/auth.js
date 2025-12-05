@@ -34,12 +34,16 @@ async function routes(fastify, options) {
   const csrfModule = require('../plugins/csrf');
 
   function getRedirectUri(request) {
-    // Prefer configured FRONTEND_URL when set
-    if (config.FRONTEND_URL) return config.FRONTEND_URL.replace(/\/$/, '') + '/auth/callback';
-    // Use X-Forwarded-Proto/Host when present (behind proxies)
-    const proto = (request.headers && (request.headers['x-forwarded-proto'] || request.headers['x-forwarded-protocol'])) || request.protocol || 'https';
-    const host = (request.headers && (request.headers['x-forwarded-host'] || request.headers.host)) || 'localhost';
-    return `${proto}://${host}/auth/callback`;
+    // GitHub redirects to frontend with code, frontend then calls backend /auth/callback
+    // Use configured FRONTEND_URL or derive from request
+    const frontendBase = config.FRONTEND_URL 
+      ? config.FRONTEND_URL.replace(/\/$/, '')
+      : (() => {
+          const proto = (request.headers && (request.headers['x-forwarded-proto'] || request.headers['x-forwarded-protocol'])) || request.protocol || 'https';
+          const host = (request.headers && (request.headers['x-forwarded-host'] || request.headers.host)) || 'localhost';
+          return `${proto}://${host}`;
+        })();
+    return `${frontendBase}/?auth=callback`;
   }
 
   function isAllowedRedirect(nextUrl) {
