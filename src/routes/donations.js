@@ -9,7 +9,71 @@ async function routes(fastify, opts) {
   // ensure table exists
   donations.initDonationsTable();
 
-  fastify.post('/donations/create', async (request, reply) => {
+  // Initialize donation panel with provider config and progress data
+  fastify.get('/donation/init', async (request, reply) => {
+    try {
+      // Prepare provider-specific data
+      const providerData = {
+        payment_provider: (config.DONATION_CHECKOUT_PROVIDER || 'paypal').toLowerCase(),
+        paypal_client_id: null,
+        stripe_public_key: null
+      };
+
+      if (providerData.payment_provider === 'paypal') {
+        providerData.paypal_client_id = config.PAYPAL_CLIENT_ID || null;
+      } else if (providerData.payment_provider === 'stripe') {
+        providerData.stripe_public_key = config.STRIPE_PUBLIC_KEY || null;
+      }
+
+      // Amount tiers for the UI
+      const amountTiers = config.DONATION_AMOUNT_TIERS || [5, 10, 25, 50, 100];
+
+      return reply.send({
+        success: true,
+        data: {
+          languages: [],       // Can be populated from a languages service if available
+          issues: [],          // Can be populated from GitHub issues if available
+          progress: {
+            words: 100,        // Placeholder - can be connected to analysis progress
+            sentences: 100
+          },
+          visibility: {
+            words_section: false,
+            sentences_section: false
+          },
+          amount_tiers: amountTiers,
+          ...providerData
+        }
+      });
+    } catch (err) {
+      request.log && request.log.error && request.log.error('donation.init error', err && err.message ? err.message : err);
+      return reply.code(500).send({ success: false, error: 'Failed to initialize donation data' });
+    }
+  });
+
+  // Get sponsorship statistics for a specific category
+  fastify.get('/donation/stats/:category', async (request, reply) => {
+    try {
+      const { category } = request.params;
+      
+      // For now, return empty stats - can be connected to actual database queries
+      const validCategories = ['languages', 'issues', 'words', 'sentences', 'analysis'];
+      if (!validCategories.includes(category)) {
+        return reply.code(400).send({ success: false, error: 'Invalid category' });
+      }
+
+      // Placeholder stats - connect to donations model for real data
+      return reply.send({
+        success: true,
+        stats: []
+      });
+    } catch (err) {
+      request.log && request.log.error && request.log.error(`donation.stats.${request.params.category} error`, err && err.message ? err.message : err);
+      return reply.code(500).send({ success: false, error: 'Failed to get stats' });
+    }
+  });
+
+  fastify.post('/donation/create-payment', async (request, reply) => {
     try {
       const body = request.body || {};
       const { sponsor_type, target_identifier, amount, currency = 'USD', message, idempotency_key, provider = 'paypal' } = body;
@@ -111,7 +175,7 @@ async function routes(fastify, opts) {
     }
   });
 
-  fastify.post('/donations/confirm', async (request, reply) => {
+  fastify.post('/donation/execute-payment', async (request, reply) => {
     try {
       const { order_id } = request.body || {};
       if (!order_id) return reply.code(400).send({ status: 'error', message: 'Missing order_id' });
@@ -144,7 +208,7 @@ async function routes(fastify, opts) {
   });
 
   // List donation campaigns with progress
-  fastify.get('/donations/campaigns', async (request, reply) => {
+  fastify.get('/donation/campaigns', async (request, reply) => {
     try {
       const list = campaignsService.getCampaigns();
       return reply.send({ status: 'ok', campaigns: list });

@@ -52,7 +52,7 @@ async function run() {
   for (let i = 0; i < LIMIT; i++) {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/ollama/proxy-chat',
+      url: '/ollama/proxy-chat',
       payload: body,
       headers: {
         'content-type': 'application/json',
@@ -67,7 +67,7 @@ async function run() {
   // The next request should be rate-limited (429)
   const res429 = await app.inject({
     method: 'POST',
-    url: '/api/ollama/proxy-chat',
+    url: '/ollama/proxy-chat',
     payload: body,
     headers: {
       'content-type': 'application/json',

@@ -37,7 +37,7 @@ async function run() {
 
   // Create donation
   const payload = { sponsor_type: 'donation', amount: 5.00, currency: 'USD', idempotency_key: 'test-key-1' };
-  const createRes = await app.inject({ method: 'POST', url: '/donations/create', payload, headers: { 'content-type': 'application/json' } });
+  const createRes = await app.inject({ method: 'POST', url: '/donation/create-payment', payload, headers: { 'content-type': 'application/json' } });
   assert.strictEqual(createRes.statusCode, 200);
   const createJson = JSON.parse(createRes.payload);
   assert.strictEqual(createJson.status, 'ok');
@@ -47,7 +47,7 @@ async function run() {
   assert.ok(sponsorshipId);
 
   // Confirm via capture endpoint (simulates the user returning and capturing)
-  const confirmRes = await app.inject({ method: 'POST', url: '/donations/confirm', payload: { order_id: orderId }, headers: { 'content-type': 'application/json' } });
+  const confirmRes = await app.inject({ method: 'POST', url: '/donation/execute-payment', payload: { order_id: orderId }, headers: { 'content-type': 'application/json' } });
   assert.strictEqual(confirmRes.statusCode, 200);
   const confirmJson = JSON.parse(confirmRes.payload);
   assert.ok(confirmJson.updated || confirmJson.status === 'ok');

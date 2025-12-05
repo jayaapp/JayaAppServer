@@ -57,6 +57,16 @@ config.ADMIN_API_KEY_HASH = getEnv('ADMIN_API_KEY_HASH', process.env.ADMIN_API_K
 config.DONATION_MIN_AMOUNT = parseFloat(getEnv('DONATION_MIN_AMOUNT', '1'));
 config.DONATION_MAX_AMOUNT = parseFloat(getEnv('DONATION_MAX_AMOUNT', '10000'));
 
+// Donation checkout provider (paypal or stripe)
+config.DONATION_CHECKOUT_PROVIDER = getEnv('DONATION_CHECKOUT_PROVIDER', 'paypal');
+
+// Public Stripe key for frontend
+config.STRIPE_PUBLIC_KEY = getEnv('STRIPE_PUBLIC_KEY', process.env.STRIPE_PUBLIC_KEY || '');
+
+// Donation amount tiers for UI
+const tiersRaw = getEnv('DONATION_AMOUNT_TIERS', '5,10,25,50,100');
+config.DONATION_AMOUNT_TIERS = tiersRaw.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+
 // Stripe configuration
 config.STRIPE_SECRET_KEY = secrets.getSecret('STRIPE_SECRET_KEY') || getEnv('STRIPE_SECRET_KEY', process.env.STRIPE_SECRET_KEY || '');
 config.STRIPE_WEBHOOK_SECRET = secrets.getSecret('STRIPE_WEBHOOK_SECRET') || getEnv('STRIPE_WEBHOOK_SECRET', process.env.STRIPE_WEBHOOK_SECRET || '');

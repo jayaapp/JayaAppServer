@@ -34,7 +34,7 @@ const build = require('../src/index');
   const body = { messages: [{ role: 'user', content: 'hello' }] };
 
   for (let i = 0; i < 12; i++) {
-    const res = await app.inject({ method: 'POST', url: '/api/ollama/proxy-chat', payload: body, headers: { 'content-type': 'application/json', 'x-forwarded-for': ip, cookie: `session_token=${cbJson.session_token}` } });
+    const res = await app.inject({ method: 'POST', url: '/ollama/proxy-chat', payload: body, headers: { 'content-type': 'application/json', 'x-forwarded-for': ip, cookie: `session_token=${cbJson.session_token}` } });
     console.log(`request ${i+1} status=${res.statusCode}`);
   }
 

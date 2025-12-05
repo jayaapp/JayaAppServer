@@ -22,7 +22,7 @@ async function run() {
       return { paid: true, payment_intent: 'pi_confirm_1', charge_id: 'ch_confirm_1' };
     };
 
-    const res = await app.inject({ method: 'POST', url: '/donations/confirm', payload: { order_id: 'cs_confirm_1' }, headers: { 'content-type': 'application/json' } });
+    const res = await app.inject({ method: 'POST', url: '/donation/execute-payment', payload: { order_id: 'cs_confirm_1' }, headers: { 'content-type': 'application/json' } });
     assert.strictEqual(res.statusCode, 200);
     const j = JSON.parse(res.payload);
     assert.strictEqual(j.status, 'ok');
@@ -35,7 +35,7 @@ async function run() {
     assert.strictEqual(r.payment_provider_capture_id, 'ch_confirm_1');
 
     await app.close();
-    console.log('Stripe /donations/confirm flow test passed');
+    console.log('Stripe /donation/execute-payment flow test passed');
   } catch (err) {
     console.error('Stripe confirm test failed:', err);
     try { await app.close(); } catch (e) {}

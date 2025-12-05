@@ -44,48 +44,48 @@ async function run() {
   const csrf = userJson.csrf_token;
 
   // Ensure check-key returns has_key false initially
-  const check1 = await app.inject({ method: 'GET', url: '/api/ollama/check-key', headers: { cookie: `session_token=${cbJson.session_token}` } });
+  const check1 = await app.inject({ method: 'GET', url: '/ollama/check-key', headers: { cookie: `session_token=${cbJson.session_token}` } });
   const check1Json = JSON.parse(check1.payload);
   assert.strictEqual(check1Json.status, 'success');
   assert.strictEqual(check1Json.has_key, false);
 
   // Store a key
   const key = 'ok_testapikey_1234567890';
-  const saveRes = await app.inject({ method: 'POST', url: '/api/ollama/store-key', headers: { cookie: `session_token=${cbJson.session_token}`, 'x-csrf-token': csrf }, payload: { ollama_api_key: key } });
+  const saveRes = await app.inject({ method: 'POST', url: '/ollama/store-key', headers: { cookie: `session_token=${cbJson.session_token}`, 'x-csrf-token': csrf }, payload: { ollama_api_key: key } });
   const saveJson = JSON.parse(saveRes.payload);
   assert.strictEqual(saveJson.status, 'success');
 
   // Check key exists
-  const check2 = await app.inject({ method: 'GET', url: '/api/ollama/check-key', headers: { cookie: `session_token=${cbJson.session_token}` } });
+  const check2 = await app.inject({ method: 'GET', url: '/ollama/check-key', headers: { cookie: `session_token=${cbJson.session_token}` } });
   const check2Json = JSON.parse(check2.payload);
   assert.strictEqual(check2Json.has_key, true);
   assert.ok(check2Json.masked_key && typeof check2Json.masked_key === 'string');
 
   // Get key
-  const getRes = await app.inject({ method: 'GET', url: '/api/ollama/get-key', headers: { cookie: `session_token=${cbJson.session_token}` } });
+  const getRes = await app.inject({ method: 'GET', url: '/ollama/get-key', headers: { cookie: `session_token=${cbJson.session_token}` } });
   const getJson = JSON.parse(getRes.payload);
   assert.strictEqual(getJson.has_key, true);
   assert.strictEqual(getJson.api_key, key);
 
   // List models
-  const modelsRes = await app.inject({ method: 'GET', url: '/api/ollama/list-models', headers: { cookie: `session_token=${cbJson.session_token}` } });
+  const modelsRes = await app.inject({ method: 'GET', url: '/ollama/list-models', headers: { cookie: `session_token=${cbJson.session_token}` } });
   const modelsJson = JSON.parse(modelsRes.payload);
   assert.ok(modelsJson.models && Array.isArray(modelsJson.models));
 
   // Call proxy-chat: should require auth + CSRF
   const chatBody = { model: 'test', messages: [{ role: 'user', content: 'hi' }], stream: false };
-  const chatRes = await app.inject({ method: 'POST', url: '/api/ollama/proxy-chat', headers: { cookie: `session_token=${cbJson.session_token}`, 'x-csrf-token': csrf }, payload: chatBody });
+  const chatRes = await app.inject({ method: 'POST', url: '/ollama/proxy-chat', headers: { cookie: `session_token=${cbJson.session_token}`, 'x-csrf-token': csrf }, payload: chatBody });
   assert.strictEqual(chatRes.statusCode, 200);
   const chatJson = JSON.parse(chatRes.payload);
   assert.strictEqual(chatJson.status, 'ok');
 
   // Delete key
-  const delRes = await app.inject({ method: 'DELETE', url: '/api/ollama/delete-key', headers: { cookie: `session_token=${cbJson.session_token}`, 'x-csrf-token': csrf } });
+  const delRes = await app.inject({ method: 'DELETE', url: '/ollama/delete-key', headers: { cookie: `session_token=${cbJson.session_token}`, 'x-csrf-token': csrf } });
   const delJson = JSON.parse(delRes.payload);
   assert.strictEqual(delJson.status, 'success');
 
   // Confirm key deleted
-  const check3 = await app.inject({ method: 'GET', url: '/api/ollama/check-key', headers: { cookie: `session_token=${cbJson.session_token}` } });
+  const check3 = await app.inject({ method: 'GET', url: '/ollama/check-key', headers: { cookie: `session_token=${cbJson.session_token}` } });
   const check3Json = JSON.parse(check3.payload);
   assert.strictEqual(check3Json.has_key, false);
 

@@ -25,7 +25,7 @@ async function routes(fastify, opts) {
   const targetBase = 'https://ollama.com';
   const targetPath = '/api/chat';
 
-  fastify.post('/api/ollama/proxy-chat', async (request, reply) => {
+  fastify.post('/ollama/proxy-chat', async (request, reply) => {
     // Require authentication and CSRF like reference
     if (typeof fastify.csrfProtection === 'function') {
       await fastify.csrfProtection(request, reply);
@@ -153,7 +153,7 @@ async function routes(fastify, opts) {
   }
 
   // Store key (requires CSRF)
-  fastify.post('/api/ollama/store-key', async (request, reply) => {
+  fastify.post('/ollama/store-key', async (request, reply) => {
     if (typeof fastify.csrfProtection === 'function') {
       const maybe = await fastify.csrfProtection(request, reply);
       if (reply.sent) return;
@@ -182,7 +182,7 @@ async function routes(fastify, opts) {
   });
 
   // Check if user has a key (authenticated)
-  fastify.get('/api/ollama/check-key', async (request, reply) => {
+  fastify.get('/ollama/check-key', async (request, reply) => {
     const login = await getAuthenticatedUserLogin(request);
     if (!login) {
       reply.code(401);
@@ -194,7 +194,7 @@ async function routes(fastify, opts) {
   });
 
   // Get decrypted API key (authenticated)
-  fastify.get('/api/ollama/get-key', async (request, reply) => {
+  fastify.get('/ollama/get-key', async (request, reply) => {
     const login = await getAuthenticatedUserLogin(request);
     if (!login) {
       reply.code(401);
@@ -206,7 +206,7 @@ async function routes(fastify, opts) {
   });
 
   // Delete key (requires CSRF)
-  fastify.delete('/api/ollama/delete-key', async (request, reply) => {
+  fastify.delete('/ollama/delete-key', async (request, reply) => {
     if (typeof fastify.csrfProtection === 'function') {
       const maybe = await fastify.csrfProtection(request, reply);
       if (reply.sent) return;
@@ -223,7 +223,7 @@ async function routes(fastify, opts) {
   });
 
   // List models (proxy to /api/tags)
-  fastify.get('/api/ollama/list-models', async (request, reply) => {
+  fastify.get('/ollama/list-models', async (request, reply) => {
     const login = await getAuthenticatedUserLogin(request);
     if (!login) {
       reply.code(401);

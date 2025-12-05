@@ -26,8 +26,8 @@ async function run() {
   const payload = { sponsor_type: 'donation', amount: 1.00, currency: 'USD', idempotency_key: 'conc-test-1' };
 
   // Fire two parallel create requests
-  const p1 = app.inject({ method: 'POST', url: '/donations/create', payload, headers: { 'content-type': 'application/json' } });
-  const p2 = app.inject({ method: 'POST', url: '/donations/create', payload, headers: { 'content-type': 'application/json' } });
+  const p1 = app.inject({ method: 'POST', url: '/donation/create-payment', payload, headers: { 'content-type': 'application/json' } });
+  const p2 = app.inject({ method: 'POST', url: '/donation/create-payment', payload, headers: { 'content-type': 'application/json' } });
 
   const [r1, r2] = await Promise.all([p1, p2]);
   const j1 = JSON.parse(r1.payload);

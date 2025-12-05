@@ -23,7 +23,7 @@ async function run() {
     };
 
     const payload = { sponsor_type: 'donation', amount: 1.00, currency: 'USD', provider: 'stripe', idempotency_key: 'stripe-create-1' };
-    const res = await app.inject({ method: 'POST', url: '/donations/create', payload, headers: { 'content-type': 'application/json' } });
+    const res = await app.inject({ method: 'POST', url: '/donation/create-payment', payload, headers: { 'content-type': 'application/json' } });
     assert.strictEqual(res.statusCode, 200);
     const j = JSON.parse(res.payload);
     assert.strictEqual(j.status, 'ok');
