@@ -1,122 +1,133 @@
 JayaApp Server (Fastify)
 =========================
 
-This folder contains a minimal Fastify-based backend for JayaApp. The goal is to replicate the Python server's functionality (OAuth, donations, Ollama keys) in Node.js and to iterate incrementally.
+This folder contains a Fastify-based backend for JayaApp, replicating the Python server's functionality (OAuth, donations, Ollama keys) in Node.js.
 
-Quick start (development)
+## Quick Start (Development)
 
-1. Ensure `../JayaAppSecrets/environment.env` exists and contains required env variables (see example below).
+1. Ensure `../JayaAppSecrets/environment.env` exists with required variables (see [SECURE_SECRETS.md](SECURE_SECRETS.md) for details).
+
 2. Install dependencies:
-
-```bash
-cd JayaAppServer
-npm install
-```
+   ```bash
+   cd JayaAppServer
+   npm install
+   ```
 
 3. Start server:
+   ```bash
+   npm run dev
+   ```
 
-```bash
-npm run dev
+4. Run tests:
+   ```bash
+   npm test
+   ```
+
+The server listens on port `3000` by default. Verify with `curl http://localhost:3000/health`.
+
+## API Endpoints
+
+### Authentication
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/auth/login` | Get GitHub authorization URL (or redirect with `?redirect=true`) |
+| GET | `/auth/callback` | OAuth callback — creates session, sets `session_token` cookie |
+| GET | `/auth/user` | Returns logged-in user info and CSRF token |
+| POST | `/auth/logout` | Clears session (requires CSRF token) |
+
+### Ollama API Keys
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/ollama/store-key` | Store encrypted Ollama API key |
+| GET | `/api/ollama/get-key` | Retrieve decrypted API key |
+| GET | `/api/ollama/check-key` | Check if user has stored key (returns masked version) |
+| DELETE | `/api/ollama/delete-key` | Delete stored API key |
+| POST | `/api/ollama/proxy-chat` | Proxy chat requests to Ollama cloud |
+| GET | `/api/ollama/list-models` | List available Ollama models |
+
+### Donations
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/donations/create` | Create PayPal/Stripe payment order |
+| POST | `/donations/confirm` | Confirm/capture payment |
+| GET | `/donations/campaigns` | List donation campaigns |
+| POST | `/webhooks/paypal` | PayPal webhook handler |
+| POST | `/webhooks/stripe` | Stripe webhook handler |
+
+### Admin
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/donations/sponsorships` | List sponsorships (paginated) |
+| GET | `/admin/donations/sponsorships.csv` | Export sponsorships as CSV |
+
+Admin endpoints require `X-Admin-Key` header. See [SECURE_SECRETS.md](SECURE_SECRETS.md#admin_api_key).
+
+## Environment Variables
+
+### Required
+
+| Variable | Description |
+|----------|-------------|
+| `SESSION_SECRET` | Signs session tokens and CSRF tokens (min 32 chars) |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App client ID |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
+| `FRONTEND_URL` | Comma-separated list of allowed frontend origins |
+
+### Optional
+
+| Variable | Description |
+|----------|-------------|
+| `JAYAAPP_DB_PATH` | Path to SQLite DB file (default: `./jayaapp_server.db`) |
+| `REDIS_SOCKET_PATH` or `REDIS_URL` | Redis connection for sessions/rate-limiting |
+| `OLLAMA_KEY_ENCRYPTION_KEY` | Encrypts Ollama keys (falls back to `SESSION_SECRET`) |
+| `ADMIN_API_KEY` | Protects admin endpoints |
+| `PAYPAL_*` | PayPal credentials (see SECURE_SECRETS.md) |
+| `STRIPE_*` | Stripe credentials (see SECURE_SECRETS.md) |
+
+For complete configuration reference, see [SECURE_SECRETS.md](SECURE_SECRETS.md).
+
+## Security
+
+- **Webhooks**: Signature verification is enforced for Stripe and PayPal. Configure `STRIPE_WEBHOOK_SECRET` and `PAYPAL_WEBHOOK_ID` in production.
+- **Sessions**: Uses Redis when available, falls back to in-memory (single-instance only).
+- **CSRF**: State-changing endpoints require `X-CSRF-Token` header.
+- **Rate limiting**: Configurable per-IP limits for general and AI endpoints.
+
+For detailed security configuration and production recommendations, see [SECURE_SECRETS.md](SECURE_SECRETS.md).
+
+## Deployment Notes (Native Modules)
+
+This project uses `better-sqlite3`, a native Node addon.
+
+### Recommended Approaches
+
+1. **Build in CI**: Run `npm ci --production` in your CI/build pipeline (or Docker image matching production OS/Node). Deploy the resulting artifact.
+
+2. **Build on target host**: Ensure build tools are present:
+   ```bash
+   # Debian/Ubuntu
+   sudo apt update
+   sudo apt install -y build-essential python3 pkg-config libsqlite3-dev
+   npm install --build-from-source better-sqlite3
+   ```
+
+3. **Docker**: Build and run in a container matching your production environment.
+
+## Project Structure
+
 ```
-
-The server listens on port `3000` by default and exposes a `/health` endpoint.
-
-Environment
-
-- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
-- `SESSION_SECRET`
-- `FRONTEND_URL` (comma-separated list)
-- Other variables are read from `../JayaAppSecrets/environment.env` if present.
-
-Important environment variables
-
-- `JAYAAPP_DB_PATH` — optional path to SQLite DB file (tests set this to a tmp file).
-- `SESSION_SECRET` — HMAC/secret used for session cookies and encryption fallbacks.
-- `REDIS_URL` or `REDIS_SOCKET_PATH` — when set, the Redis plugin will attempt to connect and sessions/rate-limiting will use Redis. Absent Redis, an in-memory fallback is used (suitable for local dev and tests only).
-- `ADMIN_API_KEY` — admin header value expected by `/admin` endpoints. Alternatively `ADMIN_API_KEY_HASH` may contain the SHA256(hex) of the key to avoid storing plaintext in env.
-- `OLLAMA_KEY_ENCRYPTION_KEY` — master secret used to encrypt Ollama API keys at rest. If not provided, `SESSION_SECRET` is used as a fallback (not recommended for production).
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` — Stripe API key and webhook signing secret. `STRIPE_WEBHOOK_SECRET` is required for webhook signature verification.
-- `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, `PAYPAL_MODE` — PayPal credentials and webhook id. `PAYPAL_MODE` may be `sandbox` or `live`.
-
-Security and webhooks
-
-- Webhook signature verification is enforced for Stripe and PayPal. Ensure `STRIPE_WEBHOOK_SECRET` and `PAYPAL_WEBHOOK_ID` (and PayPal credentials) are configured in production so webhook handlers can verify requests.
-- The server expects raw request bodies for webhook verification. Do not place additional middleware that transforms the body before the server (or ensure the raw body is preserved).
-- Avoid leaking sensitive values in logs (webhook payloads, secrets, full API keys). Rotate keys periodically and use a secrets manager when possible.
-
-OAuth endpoints
-
-- `GET /auth/login` — get a GitHub authorization URL (or redirect with `?redirect=true`).
-- `GET /auth/callback` — OAuth callback. Creates a session and sets `session_token` cookie.
-- `GET /auth/user` — returns the logged-in user (requires session cookie).
-- `POST /auth/logout` — clears the session.
-
-Notes
-
-- This scaffold uses a simple in-memory session store for development. For production, configure Redis and replace the session plugin.
-- Ollama key migration will be implemented later and is deferred until the Ollama module is built.
-
-Admin API Key
---------------
-
-The server exposes admin endpoints (for example the reconciliation and CSV export endpoints under `/admin`) that can be protected with an `ADMIN_API_KEY`.
-
-- `ADMIN_API_KEY` is not present by default in the example `../JayaAppSecrets/environment.env` attachment. Add it there or set it in your environment to enable admin-key protection.
-- The server expects the key to be supplied as an HTTP header named `x-admin-key` when calling protected endpoints.
-
-Generation and example
-----------------------
-
-Generate a strong random token (recommended: 32 bytes or more). Examples:
-
-```bash
-# 32 bytes, hex (64 chars)
-openssl rand -hex 32
-
-# 32 bytes, base64 (readable, ~43 chars)
-openssl rand -base64 32
-
-# Node.js one-liner (hex)
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+src/
+├── index.js          # Server entry point
+├── config.js         # Configuration loader
+├── secrets.js        # Secrets abstraction (env/provider)
+├── plugins/          # Fastify plugins (session, csrf, rate-limit, etc.)
+├── routes/           # Route handlers (auth, donations, ollama, admin)
+├── models/           # Database models (user, donations, ollama_keys)
+├── services/         # External service clients (paypal, stripe, campaigns)
+└── utils/            # Utilities (encryption)
+tests/                # Test files
 ```
-
-Then add the token to `../JayaAppSecrets/environment.env` (do NOT commit this file to git):
-
-```
-ADMIN_API_KEY=your_generated_token_here
-```
-
-Security recommendations
-------------------------
-
-- Store the key in a secure secrets manager (Vault, cloud secret manager, or CI secrets) where possible.
-- If you keep it in `environment.env`, protect the file with filesystem permissions (`chmod 600`) and avoid committing it to source control.
-- Rotate the key periodically and consider allowing a short overlap window when rolling to a new key.
-- Log and rate-limit admin endpoints to detect and mitigate brute-force or misuse attempts.
-- For stronger handling, you can store a hash/HMAC of the key server-side and compare hashes instead of keeping plaintext in the environment (requires a small code change).
-
-Usage example
--------------
-
-Call the CSV export endpoint with the admin header:
-
-```bash
-curl -H "x-admin-key: $ADMIN_API_KEY" \
-	"http://localhost:3000/admin/donations/sponsorships.csv?status=completed" \
-	-o sponsorships.csv
-```
-
-If `ADMIN_API_KEY` is not set the admin endpoints are not protected by the header check in development, but it's recommended to configure a key before deploying to any shared environment.
-
-Deployment notes (native modules)
- - This project uses `better-sqlite3`, a native Node addon. In many environments the package provides prebuilt binaries for common Node versions and platforms. If a prebuilt binary is not available for your Node ABI, npm will attempt to compile from source.
- - Preferred deployment approaches:
-	 - Build artifacts in CI: run `npm ci --production` in your CI/build pipeline (or in a Docker image matching your production OS/Node). Package the resulting image/artifact and deploy that. This avoids needing build tools on the target host.
-	 - If you must install on the target host, ensure system build tools and SQLite headers are present (Debian/Ubuntu example):
-		 ```bash
-		 sudo apt update
-		 sudo apt install -y build-essential python3 pkg-config libsqlite3-dev
-		 npm install --build-from-source better-sqlite3
-		 ```
-	 - You can also build prebuilt binaries on a compatible host and host them behind an HTTP mirror; use `npm_config_binary_host_mirror` to point the installer to your mirror.
- - If you want to avoid native modules in development, consider running the app inside the same Docker image used for production, or enable a JS fallback (not implemented by default).

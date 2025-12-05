@@ -50,6 +50,12 @@ config.PAYPAL_WEBHOOK_ID = secrets.getSecret('PAYPAL_WEBHOOK_ID') || getEnv('PAY
 
 // Optional admin API key to protect reconciliation endpoints
 config.ADMIN_API_KEY = getEnv('ADMIN_API_KEY', process.env.ADMIN_API_KEY || '');
+// Optional hashed admin API key (SHA256 hex) for safer storage
+config.ADMIN_API_KEY_HASH = getEnv('ADMIN_API_KEY_HASH', process.env.ADMIN_API_KEY_HASH || '');
+
+// Donation amount limits (matching Python reference)
+config.DONATION_MIN_AMOUNT = parseFloat(getEnv('DONATION_MIN_AMOUNT', '1'));
+config.DONATION_MAX_AMOUNT = parseFloat(getEnv('DONATION_MAX_AMOUNT', '10000'));
 
 // Stripe configuration
 config.STRIPE_SECRET_KEY = secrets.getSecret('STRIPE_SECRET_KEY') || getEnv('STRIPE_SECRET_KEY', process.env.STRIPE_SECRET_KEY || '');

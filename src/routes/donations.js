@@ -17,6 +17,30 @@ async function routes(fastify, opts) {
         return reply.code(400).send({ status: 'error', message: 'Invalid request' });
       }
 
+      // Validate amount with min/max limits (matching Python reference)
+      const amountNum = parseFloat(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        return reply.code(400).send({ status: 'error', message: 'Amount must be a positive number' });
+      }
+      if (amountNum < config.DONATION_MIN_AMOUNT) {
+        return reply.code(400).send({ status: 'error', message: `Amount must be at least $${config.DONATION_MIN_AMOUNT.toFixed(2)}` });
+      }
+      if (amountNum > config.DONATION_MAX_AMOUNT) {
+        return reply.code(400).send({ status: 'error', message: `Amount cannot exceed $${config.DONATION_MAX_AMOUNT.toFixed(2)}` });
+      }
+
+      // Validate and sanitize message (matching Python reference)
+      let sanitizedMessage = message ? String(message).trim() : null;
+      if (sanitizedMessage) {
+        if (sanitizedMessage.length > 500) {
+          return reply.code(400).send({ status: 'error', message: 'Message too long (max 500 characters)' });
+        }
+        // Basic HTML/script tag prevention
+        if (/<|>|script/i.test(sanitizedMessage)) {
+          return reply.code(400).send({ status: 'error', message: 'Invalid characters in message' });
+        }
+      }
+
       const prov = (provider || 'paypal').toString().toLowerCase();
       const userId = (request.session && request.session.user && request.session.user.login) || 'anonymous';
       const userEmail = (request.session && request.session.user && request.session.user.email) || null;
@@ -24,7 +48,7 @@ async function routes(fastify, opts) {
       let sponsorshipId = null;
       if (idempotency_key) {
         // Reserve or find existing sponsorship row
-        sponsorshipId = donations.addSponsorship({ user_id: userId, user_email: userEmail, sponsor_type, target_identifier, amount_usd: amount, currency, payment_provider: prov === 'stripe' ? 'stripe' : 'paypal', payment_provider_order_id: null, message, idempotency_key });
+        sponsorshipId = donations.addSponsorship({ user_id: userId, user_email: userEmail, sponsor_type, target_identifier, amount_usd: amount, currency, payment_provider: prov === 'stripe' ? 'stripe' : 'paypal', payment_provider_order_id: null, message: sanitizedMessage, idempotency_key });
         const reserved = donations.tryReserveSponsorshipByIdempotencyKey(idempotency_key);
         if (!reserved) {
           // Poll for existing order id set by another worker
@@ -65,7 +89,7 @@ async function routes(fastify, opts) {
         const updated = donations.getSponsorshipByIdempotencyKey(idempotency_key);
         sponsorshipId = updated ? updated.id : sponsorshipId;
       } else {
-        sponsorshipId = donations.addSponsorship({ user_id: userId, user_email: userEmail, sponsor_type, target_identifier, amount_usd: amount, currency, payment_provider: prov === 'stripe' ? 'stripe' : 'paypal', payment_provider_order_id: orderId, message, idempotency_key: null });
+        sponsorshipId = donations.addSponsorship({ user_id: userId, user_email: userEmail, sponsor_type, target_identifier, amount_usd: amount, currency, payment_provider: prov === 'stripe' ? 'stripe' : 'paypal', payment_provider_order_id: orderId, message: sanitizedMessage, idempotency_key: null });
       }
 
       const result = { status: 'ok', sponsorship_id: sponsorshipId, order_id: orderId, raw: order };
@@ -185,6 +209,16 @@ async function routes(fastify, opts) {
 
       const event = typeof bodyRaw === 'string' ? JSON.parse(bodyRaw) : JSON.parse(bodyRaw.toString('utf8'));
       const eventType = event.type || event.event_type;
+
+      // Handle checkout.session.completed event (Stripe Checkout flow)
+      if (eventType === 'checkout.session.completed') {
+        const resource = event.data && event.data.object ? event.data.object : {};
+        const sessionId = resource.id;
+        const paymentIntent = resource.payment_intent;
+        if (sessionId && paymentIntent) {
+          donations.completeSponsorship(sessionId, paymentIntent);
+        }
+      }
 
       // Handle PaymentIntent success and failure
       if (eventType === 'payment_intent.succeeded' || eventType === 'payment_intent.payment_failed') {

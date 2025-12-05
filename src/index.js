@@ -31,7 +31,11 @@ const redactPaths = defaultRedact.concat(extra.map(k => `payload.${k}`)).concat(
 const logger = pino({ level: (config.LOG_LEVEL || 'info').toLowerCase(), redact: { paths: redactPaths, censor: '***REDACTED***' } });
 
 async function build() {
-  const app = fastify({ logger });
+  const app = fastify({
+    logger,
+    bodyLimit: 1048576, // 1MB request body limit
+    trustProxy: true // Trust X-Forwarded-* headers from reverse proxy
+  });
 
   // Basic plugins
   await app.register(cookie);
@@ -40,10 +44,22 @@ async function build() {
     credentials: true
   });
   // capture raw bodies for specific routes (webhooks)
-  // Use the installed `fastify-raw-body` package to preserve exact bytes for webhook signature verification
-  await app.register(require('fastify-raw-body'), { field: 'rawBody', global: false, encoding: 'utf8', runFirst: true });
+  // Use our custom raw_body plugin to preserve exact bytes for webhook signature verification
+  // This avoids the deprecation warning from fastify-raw-body package
+  await app.register(require('./plugins/raw_body'), { bodyLimit: 1048576 });
   if (config.SECURITY_HEADERS_ENABLED) {
     await app.register(helmet, { contentSecurityPolicy: false });
+    
+    // Add additional security headers matching the Python reference implementation
+    app.addHook('onSend', async (request, reply, payload) => {
+      // These headers complement what helmet provides
+      reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+      reply.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+      reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+      reply.header('Pragma', 'no-cache');
+      reply.header('Expires', '0');
+      return payload;
+    });
   }
 
   // Internal plugins
@@ -69,6 +85,34 @@ if (require.main === module) {
   (async () => {
     const app = await build();
     const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+    // Graceful shutdown handling
+    const gracefulShutdown = async (signal) => {
+      logger.info(`Received ${signal}. Shutting down gracefully...`);
+      try {
+        await app.close();
+        logger.info('Server closed successfully');
+        process.exit(0);
+      } catch (err) {
+        logger.error('Error during shutdown', err);
+        process.exit(1);
+      }
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+    // Handle uncaught exceptions and unhandled rejections
+    process.on('uncaughtException', (err) => {
+      logger.error('Uncaught exception', err);
+      gracefulShutdown('uncaughtException');
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      logger.error('Unhandled rejection at', promise, 'reason:', reason);
+      // Don't exit on unhandled rejection, just log it
+    });
+
     try {
       await app.listen({ port, host: '0.0.0.0' });
       logger.info(`Server listening on port ${port}`);

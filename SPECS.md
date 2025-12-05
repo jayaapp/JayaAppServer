@@ -1,117 +1,208 @@
-**JayaAppServer Specs**
+**JayaAppServer Technical Reference**
 
-**Purpose**: Provide a concise design and reference for the Node.js Fastify backend that replaces the original Python WSGI server. This file captures architecture, API surface, data model, environment variables, security considerations, operational notes, and migration guidance (including the Ollama key migration which is deferred until Ollama work).
+This document provides technical architecture details, database schema, and deployment notes for the Node.js Fastify backend. For quick start and API documentation, see [README.md](README.md). For security configuration, see [SECURE_SECRETS.md](SECURE_SECRETS.md).
 
-**Runtime & Framework**:
-- **Runtime**: Node.js (target >= `22.18.0`).
-- **Framework**: Fastify (v4+). Use official `@fastify` plugins where available.
+## Runtime & Framework
 
-**Repository Layout (key paths)**
-- **`package.json`**: npm manifest and scripts.
-- **`src/index.js`**: Fastify bootstrap and plugin registration (app startup file for provider panel).
-- **`src/config.js`**: Loads `../JayaAppSecrets/environment.env` (fallback to local `.env`) and normalizes configuration values.
-- **`src/plugins/`**: Fastify plugins (e.g. `session.js`).
-- **`src/routes/`**: Route definitions (e.g. `auth.js`).
-- **`src/models/`**: DB layer and models (e.g. `db.js`, `user.js`).
-- **`tests/`**: Minimal tests using Fastify's inject for the OAuth flow.
-- **`SPECS.md`**: This document.
+- **Runtime**: Node.js >= `22.18.0`
+- **Framework**: Fastify v4+ with official `@fastify` plugins
+- **Database**: SQLite via `better-sqlite3` (native addon)
+- **Session storage**: Redis (preferred) or in-memory fallback
 
-**High-Level Architecture**
-- **API server**: Fastify app exposing REST endpoints for authentication, user info, donations, webhook receivers, and Ollama key management.
-- **Session storage**: Primary: Redis (Unix socket or URL) when available; fallback: in-memory store for development. Plugin uses lazy connect and skips Redis if socket missing (dev-friendly).
-- **Database**: SQLite by default (local file) for persistent entities (users, sponsorships, progress, GitHub issues). Implementation uses a pluggable approach so devs can use WASM SQLite (`sql.js`) locally if native bindings not available.
-- **Payments**: PayPal (sandbox/live) and Stripe integration via respective SDKs; webhooks are verified by provider signatures.
-- **Ollama key management**: Encrypted per-user API key storage (AES-GCM recommended). Migration of existing keys from Python storage deferred to Ollama module implementation.
+## Repository Layout
 
-**Primary API Surface (initial focus)**
-- **Auth**
-  - `GET /auth/login` — returns GitHub authorization URL and `state` or redirects (`?redirect=true`).
-  - `GET /auth/callback` — OAuth callback; exchanges code for access token, fetches GitHub profile, persists user, creates session, sets secure cookie `session_token`.
-  - `GET /auth/user` — returns current user, requires session cookie.
-  - `POST /auth/logout` — invalidates session and clears cookie.
+```
+JayaAppServer/
+├── package.json          # npm manifest and scripts
+├── src/
+│   ├── index.js          # Fastify bootstrap and plugin registration
+│   ├── config.js         # Configuration loader
+│   ├── secrets.js        # Secrets abstraction (env/adapters)
+│   ├── plugins/
+│   │   ├── session.js    # Session management (Redis/in-memory)
+│   │   ├── csrf.js       # CSRF token generation/validation
+│   │   ├── rateLimit.js  # General rate limiting
+│   │   ├── aiRateLimit.js # AI endpoint rate limiting
+│   │   ├── redis.js      # Redis client management
+│   │   ├── raw_body.js   # Raw body capture for webhooks
+│   │   ├── authenticate.js # Authentication decorator
+│   │   └── perf.js       # Performance tracking hooks
+│   ├── routes/
+│   │   ├── auth.js       # OAuth endpoints
+│   │   ├── donations.js  # Payment and webhook endpoints
+│   │   ├── ollama.js     # Ollama key management and proxy
+│   │   └── admin.js      # Admin endpoints
+│   ├── models/
+│   │   ├── db.js         # SQLite connection management
+│   │   ├── user.js       # User persistence
+│   │   ├── donations.js  # Sponsorship persistence
+│   │   └── ollama_keys.js # Encrypted key storage
+│   ├── services/
+│   │   ├── paypal.js     # PayPal API client
+│   │   ├── stripe.js     # Stripe API client
+│   │   └── campaigns.js  # Campaign data loader
+│   └── utils/
+│       └── ollama_keys_encryption.js # AES-GCM encryption
+├── tests/                # Test files
+├── README.md             # Quick start and API docs
+├── SECURE_SECRETS.md     # Security configuration
+└── SPECS.md              # This file
+```
 
-- **Donations (planned)**
-  - `POST /donations/create` — create sponsorship and return payment order info.
-  - `POST /donations/confirm` — confirm capture after payment provider callback.
-  - `GET /donations/status/:id` — sponsorship status.
+## Database Schema
 
-- **Webhooks**
-  - `POST /webhooks/paypal` — PayPal notifications, verified using `PAYPAL_WEBHOOK_ID` + SDK.
-  - `POST /webhooks/stripe` — Stripe signature verification using `STRIPE_WEBHOOK_SECRET`.
+### users
+```sql
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,           -- GitHub user ID
+  login TEXT,                    -- GitHub username
+  name TEXT,                     -- Display name
+  avatar_url TEXT,               -- Profile image URL
+  email TEXT,                    -- Email (may be null)
+  created_at INTEGER,            -- Unix timestamp
+  last_login INTEGER,            -- Unix timestamp
+  metadata TEXT                  -- JSON blob of full GitHub user object
+);
+```
 
-- **Ollama Keys**
-  - `POST /api/ollama/store-key` — store encrypted key for authenticated user.
-  - `GET /api/ollama/check-key` — whether user has a key (return masked key if present).
-  - `GET /api/ollama/get-key` — return decrypted key (restricted and rate-limited).
-  - `DELETE /api/ollama/delete-key` — delete key for user.
+### sponsorships
+```sql
+CREATE TABLE sponsorships (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,                          -- GitHub login or 'anonymous'
+  user_email TEXT,                       -- Email if available
+  sponsor_type TEXT NOT NULL,            -- 'donation', 'translation', etc.
+  target_identifier TEXT,                -- Language code, issue number, etc.
+  amount_usd DECIMAL(10,2) NOT NULL,
+  currency TEXT DEFAULT 'USD',
+  payment_provider TEXT DEFAULT 'paypal', -- 'paypal' or 'stripe'
+  payment_provider_order_id TEXT UNIQUE,  -- PayPal order ID or Stripe session ID
+  payment_provider_capture_id TEXT,       -- Capture/charge ID after completion
+  message TEXT,                           -- Optional donor message
+  status TEXT DEFAULT 'pending',          -- 'pending', 'completed', 'failed', 'refunded'
+  created_at INTEGER,                     -- Unix timestamp
+  reserved_at INTEGER,                    -- For idempotency locking
+  completed_at INTEGER,                   -- Unix timestamp
+  idempotency_key TEXT UNIQUE             -- Client-provided dedup key
+);
+```
 
-  - `POST /api/ollama/proxy-chat` — proxy endpoint for chat requests to Ollama models (used by frontend at `/api/ollama/proxy-chat`).
-  - `GET /api/ollama/list-models` — list available Ollama models (used by frontend settings UI).
+### ollama_keys
+```sql
+CREATE TABLE ollama_keys (
+  user_id TEXT PRIMARY KEY,      -- GitHub login
+  api_key_encrypted BLOB NOT NULL, -- AES-GCM encrypted key
+  created_at INTEGER,            -- Unix timestamp
+  updated_at INTEGER,            -- Unix timestamp
+  last_used_at INTEGER           -- For cleanup of stale keys
+);
+CREATE INDEX idx_ollama_keys_last_used ON ollama_keys(last_used_at);
+```
 
+## Session Strategy
 
-**Data Model (core tables)**
-- **`users`**: `id TEXT PK`, `login`, `name`, `avatar_url`, `email`, `created_at`, `last_login`, `metadata JSON`.
-- **`sponsorships`**: id, user_id, sponsor_type, target_identifier, amount_usd, currency, payment_provider, payment_provider_order_id, payment_provider_capture_id, message, status, created_at, completed_at, idempotency_key.
-- **`language_progress`**, **`analysis_progress`**, **`github_issues`**: as used by donation DB (kept compatible with Python schema for future sync).
-- **`ollama_keys`** (planned): `user_id`, `encrypted_key`, `nonce`, `updated_at` (migration-only target).
+1. **Redis (preferred)**: When `REDIS_SOCKET_PATH` or `REDIS_URL` is configured and accessible, sessions are stored in Redis with 7-day TTL.
 
-**Session Strategy**
-- By default, the plugin attempts to connect to Redis when `REDIS_SOCKET_PATH` or `REDIS_URL` is configured and the socket file exists. Connection is lazy; failures fall back to in-memory sessions.
-- Sessions are represented as UUID tokens stored in Redis with TTL (7 days) or in memory with expiration.
-- Cookie: `session_token`, `HttpOnly`, `SameSite=Lax`, `Secure` in production.
+2. **In-memory fallback**: When Redis is unavailable, sessions are stored in a JavaScript Map. Suitable for development and single-instance deployments only.
 
-**Configuration & Environment**
-- Primary env file location: `../JayaAppSecrets/environment.env` (loaded by `src/config.js`).
-- Key variables (must be set in production):
-  - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
-  - `SESSION_SECRET` (cookie signing / HMAC secrets)
-  - `FRONTEND_URL` (comma-separated origins)
-  - `REDIS_SOCKET_PATH` or `REDIS_URL` (optional)
-  - `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MODE`, `PAYPAL_WEBHOOK_ID`
-  - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
-  - `OLLAMA_KEY_ENCRYPTION_KEY` (32-byte base64/hex) — used when Ollama module implemented
-  - `LOG_LEVEL`, `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW`, `SECURITY_HEADERS_ENABLED`, `HSTS_MAX_AGE`
+3. **Session token**: UUID v4, stored in `session_token` cookie with:
+   - `HttpOnly: true`
+   - `SameSite: Lax`
+   - `Secure: true` (in production)
+   - `Path: /`
 
-**Security Considerations**
-- Enforce HTTPS in production and set HSTS based on `HSTS_MAX_AGE`.
-- Use `fastify-helmet` for security headers when `SECURITY_HEADERS_ENABLED`.
-- CORS restricted to `FRONTEND_URLS` loaded from env.
-- CSRF protection: HMAC-style tokens tied to session; require `X-CSRF-Token` header for state-changing requests.
-- Webhook verification: verify signatures for PayPal/Stripe webhooks using provider secrets.
-- Ollama keys: encrypt at rest with dedicated key; never log raw keys.
+4. **Fixed expiry**: Sessions expire 7 days after creation (not sliding).
 
-**Testing & Dev Notes**
-- Tests use Fastify `inject` to simulate requests; the OAuth test mocks GitHub API responses via a global `fetch` mock.
-- The session plugin is resilient: it does not fail tests when deployment Redis socket path exists in env but is not present locally — it checks for the socket file and skips Redis if missing.
-- Native modules: `better-sqlite3` is a native addon and may require system build tools on local dev; the project supports using an in-memory/`sql.js` fallback approach if native compilation is not possible in dev.
+## Encryption (Ollama Keys)
 
-**Migration notes**
-- Only one migration is required from the Python server for the rewrite: **Ollama keys**. All other data can be kept or recreated; donation and user data migration is optional and can be performed later.
-- Ollama migration plan (deferred until Ollama module):
-  1. Inspect Python `ollama_keys_database.py` / `ollama_keys_encryption.py` to identify storage and encryption scheme.
- 2. Export keys and decrypt using the same secret (if encrypted with `SESSION_SECRET` or other key).
- 3. Re-encrypt keys using `OLLAMA_KEY_ENCRYPTION_KEY` (AES-GCM) and insert into Node DB `ollama_keys` table.
- 4. Verify migration with sample decrypt checks and remove old copies after validation.
+Keys are encrypted using:
+- **Key derivation**: PBKDF2 with SHA-256, 100,000 iterations
+- **Salt**: SHA-256 hash of `ollama_key_${userId}`
+- **Encryption**: AES-256-GCM with random 12-byte IV
+- **Storage format**: `IV (12 bytes) || Auth Tag (16 bytes) || Ciphertext`
 
-**Operational / Provider panel notes**
-- Set `Application root` to the directory containing `package.json` (e.g. the `JayaAppServer` folder). Set `Application startup file` to `src/index.js`.
-- Ensure env variables from `../JayaAppSecrets/environment.env` are available to the process (provider must allow referencing parent path or each key must be set in provider UI). If the provider cannot read relative files, copy required env values into the provider settings.
-- Use Node `22.18.0` (provider recommended). If you build assets or use TypeScript, ensure `start` points to compiled JS (`dist/index.js`).
+The master secret is `OLLAMA_KEY_ENCRYPTION_KEY` (falls back to `SESSION_SECRET`).
 
-**Roadmap / Next Milestones**
-- Implement persistent user storage (done in DB model); verify production SQLite vs dev fallback.
-- Implement CSRF tokens and rate-limiting.
-- Implement donation flow + payment SDKs + webhooks.
-- Implement Ollama key management and migration script.
-- Add monitoring (`/metrics` Prometheus) + structured logs (pino) + performance analytics persistence if needed.
+## Hosting Provider Setup
 
-**Contact / Debugging Tips**
-- To run locally:
-  - `cd JayaAppServer && npm install`
-  - `npm run dev` (or `npm start`)
-  - Set `NODE_ENV=development` and ensure `../JayaAppSecrets/environment.env` exists.
-- To run tests:
-  - `npm test` (the test suite uses mocked GitHub calls and an in-memory session fallback).
+For shared hosting or PaaS providers with Node.js support:
 
-**Change Log**
-- This document tracks decisions and will be updated as the rewrite progresses. Keep this file next to `README.md` in `JayaAppServer/`.
+1. **Application root**: Set to the `JayaAppServer` directory (containing `package.json`)
+
+2. **Startup file**: `src/index.js`
+
+3. **Node version**: 22.18.0 or later
+
+4. **Environment variables**: 
+   - If provider cannot read `../JayaAppSecrets/environment.env`, copy required values to provider's environment settings
+   - Required: `SESSION_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `FRONTEND_URL`
+
+5. **Build step** (if needed):
+   ```bash
+   npm ci --production
+   ```
+
+6. **Native modules**: `better-sqlite3` requires compilation. Either:
+   - Build in CI and deploy artifacts
+   - Ensure build tools on host (`build-essential`, `python3`, `libsqlite3-dev`)
+
+## Migration: Ollama Keys from Python Server
+
+If migrating existing Ollama keys from the Python server:
+
+1. **Verify encryption compatibility**: Both servers use PBKDF2 + AES-GCM with same parameters. Keys encrypted by Python can be decrypted by Node.js if:
+   - Same master secret (`OLLAMA_KEY_ENCRYPTION_KEY` or `SESSION_SECRET`)
+   - Same user ID used as salt component
+
+2. **Export from Python DB**:
+   ```bash
+   sqlite3 ollama_keys.db "SELECT user_id, hex(api_key_encrypted) FROM user_api_keys;"
+   ```
+
+3. **Import to Node.js DB**:
+   ```sql
+   INSERT INTO ollama_keys (user_id, api_key_encrypted, created_at, updated_at)
+   VALUES (?, x'...', strftime('%s','now'), strftime('%s','now'));
+   ```
+
+4. **Verify**: Test decryption with a sample user before removing Python DB.
+
+## Testing
+
+Tests use Fastify's `inject()` for HTTP simulation without network overhead.
+
+```bash
+npm test
+```
+
+Key test files:
+- `test_oauth.js` - OAuth flow with mocked GitHub API
+- `test_db.js` - User persistence
+- `test_logout_csrf.js` - CSRF protection on logout
+- `test_ollama_keys.js` - Key storage/retrieval/deletion
+- `test_ai_rate_limit.js` - AI endpoint rate limiting
+- `test_paypal_flow.js` - Donation creation/confirmation
+- `test_paypal_webhook.js` - Webhook signature verification
+- `test_idempotent_concurrent_create.js` - Idempotency handling
+- `test_cookie_and_csrf_attrs.js` - Cookie security attributes
+
+## Implementation Status
+
+| Feature | Status |
+|---------|--------|
+| GitHub OAuth | ✅ Complete |
+| Session management (Redis + fallback) | ✅ Complete |
+| CSRF protection | ✅ Complete |
+| Rate limiting (general + AI) | ✅ Complete |
+| User persistence | ✅ Complete |
+| Donations (PayPal) | ✅ Complete |
+| Donations (Stripe) | ✅ Complete |
+| Webhook verification | ✅ Complete |
+| Ollama key encryption | ✅ Complete |
+| Ollama proxy/list-models | ✅ Complete |
+| Admin endpoints | ✅ Complete |
+| Crowdsourcing/analysis endpoints | ⏸️ Deferred (frontend differs) |
+
+---
+
+*Last updated: December 2025*
