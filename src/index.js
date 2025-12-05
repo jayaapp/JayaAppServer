@@ -39,6 +39,7 @@ const logFile = path.join(logsDir, 'server.log');
 
 const logger = pino({
   level: logLevel,
+  timestamp: pino.stdTimeFunctions.isoTime,  // Human-readable ISO timestamps
   redact: { paths: redactPaths, censor: '***REDACTED***' },
   transport: {
     target: 'pino/file',
