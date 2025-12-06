@@ -34,42 +34,13 @@ const config = {
   RATE_LIMIT_WINDOW: parseInt(getEnv('RATE_LIMIT_WINDOW', '60'), 10),
   SECURITY_HEADERS_ENABLED: getEnv('SECURITY_HEADERS_ENABLED', 'true') === 'true',
   HSTS_MAX_AGE: parseInt(getEnv('HSTS_MAX_AGE', '31536000'), 10),
-  OLLAMA_KEY_ENCRYPTION_KEY: secrets.getSecret('OLLAMA_KEY_ENCRYPTION_KEY') || getEnv('OLLAMA_KEY_ENCRYPTION_KEY', ''),
-  PAYPAL_MODE: getEnv('PAYPAL_MODE', 'sandbox')
+  OLLAMA_KEY_ENCRYPTION_KEY: secrets.getSecret('OLLAMA_KEY_ENCRYPTION_KEY') || getEnv('OLLAMA_KEY_ENCRYPTION_KEY', '')
 };
 
 // Optional list of additional sensitive keys (comma-separated) to be used by runtime
 // for log redaction and other protections. Typically you won't set this; defaults
 // are handled in code where necessary.
 config.SENSITIVE_KEYS = (getEnv('SENSITIVE_KEYS', '') || '').split(',').map(s => s.trim()).filter(Boolean);
-
-// Optional PayPal credentials (used by donations)
-config.PAYPAL_CLIENT_ID = secrets.getSecret('PAYPAL_CLIENT_ID') || getEnv('PAYPAL_CLIENT_ID', process.env.PAYPAL_CLIENT_ID || '');
-config.PAYPAL_CLIENT_SECRET = secrets.getSecret('PAYPAL_CLIENT_SECRET') || getEnv('PAYPAL_CLIENT_SECRET', process.env.PAYPAL_CLIENT_SECRET || '');
-config.PAYPAL_WEBHOOK_ID = secrets.getSecret('PAYPAL_WEBHOOK_ID') || getEnv('PAYPAL_WEBHOOK_ID', process.env.PAYPAL_WEBHOOK_ID || '');
-
-// Optional admin API key to protect reconciliation endpoints
-config.ADMIN_API_KEY = getEnv('ADMIN_API_KEY', process.env.ADMIN_API_KEY || '');
-// Optional hashed admin API key (SHA256 hex) for safer storage
-config.ADMIN_API_KEY_HASH = getEnv('ADMIN_API_KEY_HASH', process.env.ADMIN_API_KEY_HASH || '');
-
-// Donation amount limits (matching Python reference)
-config.DONATION_MIN_AMOUNT = parseFloat(getEnv('DONATION_MIN_AMOUNT', '1'));
-config.DONATION_MAX_AMOUNT = parseFloat(getEnv('DONATION_MAX_AMOUNT', '10000'));
-
-// Donation checkout provider (paypal or stripe)
-config.DONATION_CHECKOUT_PROVIDER = getEnv('DONATION_CHECKOUT_PROVIDER', 'paypal');
-
-// Public Stripe key for frontend
-config.STRIPE_PUBLIC_KEY = getEnv('STRIPE_PUBLIC_KEY', process.env.STRIPE_PUBLIC_KEY || '');
-
-// Donation amount tiers for UI
-const tiersRaw = getEnv('DONATION_AMOUNT_TIERS', '5,10,25,50,100');
-config.DONATION_AMOUNT_TIERS = tiersRaw.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
-
-// Stripe configuration
-config.STRIPE_SECRET_KEY = secrets.getSecret('STRIPE_SECRET_KEY') || getEnv('STRIPE_SECRET_KEY', process.env.STRIPE_SECRET_KEY || '');
-config.STRIPE_WEBHOOK_SECRET = secrets.getSecret('STRIPE_WEBHOOK_SECRET') || getEnv('STRIPE_WEBHOOK_SECRET', process.env.STRIPE_WEBHOOK_SECRET || '');
 
 
 // Basic validation (do not exit in development mode)

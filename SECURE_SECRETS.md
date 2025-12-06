@@ -18,12 +18,6 @@ The following secrets are required for full functionality:
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID | Yes (for auth) |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret | Yes (for auth) |
 | `OLLAMA_KEY_ENCRYPTION_KEY` | Encrypts user Ollama API keys at rest. Falls back to `SESSION_SECRET` if not set. | Recommended |
-| `PAYPAL_CLIENT_ID` | PayPal API client ID | If using PayPal |
-| `PAYPAL_CLIENT_SECRET` | PayPal API client secret | If using PayPal |
-| `PAYPAL_WEBHOOK_ID` | PayPal webhook ID for signature verification | If using PayPal webhooks |
-| `STRIPE_SECRET_KEY` | Stripe API secret key | If using Stripe |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | If using Stripe webhooks |
-| `ADMIN_API_KEY` or `ADMIN_API_KEY_HASH` | Protects admin endpoints | Recommended |
 
 ## Generating Secure Keys
 
@@ -41,50 +35,6 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # Using /dev/urandom on Linux/macOS
 head -c 32 /dev/urandom | xxd -p -c 64
 ```
-
-### ADMIN_API_KEY
-
-Generate a secure admin API key:
-
-```bash
-# Generate a 32-byte random key
-openssl rand -hex 32
-```
-
-Example output: `d4f7c9b8a1e6f2d3c5b4a7e9d0f1c2b3a4e5f6d7c8b9a0e1f2d3c4b5a6e7f8`
-
-Then add to your environment:
-```
-ADMIN_API_KEY=d4f7c9b8a1e6f2d3c5b4a7e9d0f1c2b3a4e5f6d7c8b9a0e1f2d3c4b5a6e7f8
-```
-
-### ADMIN_API_KEY_HASH (more secure alternative)
-
-Instead of storing the plaintext admin key, you can store only its SHA-256 hash. This way, if the environment file is accidentally exposed, attackers only see the hash, not the actual key.
-
-1. First, generate or choose your admin key (keep this secret, don't store it in files):
-   ```bash
-   openssl rand -hex 32
-   ```
-   Example: `my_super_secret_admin_key_here`
-
-2. Generate the SHA-256 hash of your key:
-   ```bash
-   # On Linux/macOS
-   echo -n "my_super_secret_admin_key_here" | sha256sum | cut -d' ' -f1
-   
-   # Using Node.js
-   node -e "console.log(require('crypto').createHash('sha256').update('my_super_secret_admin_key_here').digest('hex'))"
-   ```
-
-3. Store only the hash in your environment:
-   ```
-   ADMIN_API_KEY_HASH=a1b2c3d4e5f6...  # (the hash output)
-   ```
-
-4. When making admin API requests, use the original key (not the hash) in the `X-Admin-Key` header.
-
-**Note:** Use either `ADMIN_API_KEY` OR `ADMIN_API_KEY_HASH`, not both. The server checks for the hash first, then falls back to plaintext comparison.
 
 ## Adapters
 

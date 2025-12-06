@@ -89,8 +89,6 @@ async function build() {
   await app.register(require('./plugins/perf'));
   // Routes
   await app.register(require('./routes/auth'));
-  await app.register(require('./routes/donations'));
-  await app.register(require('./routes/admin'));
   await app.register(require('./routes/ollama'));
 
   app.get('/health', async (req, reply) => ({ status: 'ok' }));

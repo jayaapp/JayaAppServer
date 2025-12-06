@@ -1,7 +1,7 @@
 JayaApp Server (Fastify)
 =========================
 
-This folder contains a Fastify-based backend for JayaApp, replicating the Python server's functionality (OAuth, donations, Ollama keys) in Node.js.
+This folder contains a Fastify-based backend for JayaApp, providing OAuth authentication and Ollama API key management in Node.js.
 
 ## Quick Start (Development)
 
@@ -47,25 +47,6 @@ The server listens on port `3000` by default. Verify with `curl http://localhost
 | POST | `/api/ollama/proxy-chat` | Proxy chat requests to Ollama cloud |
 | GET | `/api/ollama/list-models` | List available Ollama models |
 
-### Donations
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/donations/create` | Create PayPal/Stripe payment order |
-| POST | `/donations/confirm` | Confirm/capture payment |
-| GET | `/donations/campaigns` | List donation campaigns |
-| POST | `/webhooks/paypal` | PayPal webhook handler |
-| POST | `/webhooks/stripe` | Stripe webhook handler |
-
-### Admin
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/admin/donations/sponsorships` | List sponsorships (paginated) |
-| GET | `/admin/donations/sponsorships.csv` | Export sponsorships as CSV |
-
-Admin endpoints require `X-Admin-Key` header. See [SECURE_SECRETS.md](SECURE_SECRETS.md#admin_api_key).
-
 ## Environment Variables
 
 ### Required
@@ -84,15 +65,11 @@ Admin endpoints require `X-Admin-Key` header. See [SECURE_SECRETS.md](SECURE_SEC
 | `JAYAAPP_DB_PATH` | Path to SQLite DB file (default: `./jayaapp_server.db`) |
 | `REDIS_SOCKET_PATH` or `REDIS_URL` | Redis connection for sessions/rate-limiting |
 | `OLLAMA_KEY_ENCRYPTION_KEY` | Encrypts Ollama keys (falls back to `SESSION_SECRET`) |
-| `ADMIN_API_KEY` | Protects admin endpoints |
-| `PAYPAL_*` | PayPal credentials (see SECURE_SECRETS.md) |
-| `STRIPE_*` | Stripe credentials (see SECURE_SECRETS.md) |
 
 For complete configuration reference, see [SECURE_SECRETS.md](SECURE_SECRETS.md).
 
 ## Security
 
-- **Webhooks**: Signature verification is enforced for Stripe and PayPal. Configure `STRIPE_WEBHOOK_SECRET` and `PAYPAL_WEBHOOK_ID` in production.
 - **Sessions**: Uses Redis when available, falls back to in-memory (single-instance only).
 - **CSRF**: State-changing endpoints require `X-CSRF-Token` header.
 - **Rate limiting**: Configurable per-IP limits for general and AI endpoints.
@@ -125,9 +102,8 @@ src/
 ├── config.js         # Configuration loader
 ├── secrets.js        # Secrets abstraction (env/provider)
 ├── plugins/          # Fastify plugins (session, csrf, rate-limit, etc.)
-├── routes/           # Route handlers (auth, donations, ollama, admin)
-├── models/           # Database models (user, donations, ollama_keys)
-├── services/         # External service clients (paypal, stripe, campaigns)
+├── routes/           # Route handlers (auth, ollama)
+├── models/           # Database models (user, ollama_keys)
 └── utils/            # Utilities (encryption)
 tests/                # Test files
 ```

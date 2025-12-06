@@ -29,18 +29,11 @@ JayaAppServer/
 │   │   └── perf.js       # Performance tracking hooks
 │   ├── routes/
 │   │   ├── auth.js       # OAuth endpoints
-│   │   ├── donations.js  # Payment and webhook endpoints
-│   │   ├── ollama.js     # Ollama key management and proxy
-│   │   └── admin.js      # Admin endpoints
+│   │   └── ollama.js     # Ollama key management and proxy
 │   ├── models/
 │   │   ├── db.js         # SQLite connection management
 │   │   ├── user.js       # User persistence
-│   │   ├── donations.js  # Sponsorship persistence
 │   │   └── ollama_keys.js # Encrypted key storage
-│   ├── services/
-│   │   ├── paypal.js     # PayPal API client
-│   │   ├── stripe.js     # Stripe API client
-│   │   └── campaigns.js  # Campaign data loader
 │   └── utils/
 │       └── ollama_keys_encryption.js # AES-GCM encryption
 ├── tests/                # Test files
@@ -62,28 +55,6 @@ CREATE TABLE users (
   created_at INTEGER,            -- Unix timestamp
   last_login INTEGER,            -- Unix timestamp
   metadata TEXT                  -- JSON blob of full GitHub user object
-);
-```
-
-### sponsorships
-```sql
-CREATE TABLE sponsorships (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id TEXT,                          -- GitHub login or 'anonymous'
-  user_email TEXT,                       -- Email if available
-  sponsor_type TEXT NOT NULL,            -- 'donation', 'translation', etc.
-  target_identifier TEXT,                -- Language code, issue number, etc.
-  amount_usd DECIMAL(10,2) NOT NULL,
-  currency TEXT DEFAULT 'USD',
-  payment_provider TEXT DEFAULT 'paypal', -- 'paypal' or 'stripe'
-  payment_provider_order_id TEXT UNIQUE,  -- PayPal order ID or Stripe session ID
-  payment_provider_capture_id TEXT,       -- Capture/charge ID after completion
-  message TEXT,                           -- Optional donor message
-  status TEXT DEFAULT 'pending',          -- 'pending', 'completed', 'failed', 'refunded'
-  created_at INTEGER,                     -- Unix timestamp
-  reserved_at INTEGER,                    -- For idempotency locking
-  completed_at INTEGER,                   -- Unix timestamp
-  idempotency_key TEXT UNIQUE             -- Client-provided dedup key
 );
 ```
 
