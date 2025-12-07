@@ -58,8 +58,7 @@ head -c 32 /dev/urandom | xxd -p -c 64
 2. Rotate any credentials that were exposed in the file.
 3. Store secrets in your deployment platform (e.g., GitHub Actions Secrets, host env vars, or a secrets manager).
 4. Set a dedicated `OLLAMA_KEY_ENCRYPTION_KEY` (do not reuse `SESSION_SECRET`).
-5. Use `ADMIN_API_KEY_HASH` (SHA-256 hex) instead of `ADMIN_API_KEY` where possible.
-6. Set `ENVIRONMENT=production` to enable production-mode behaviors.
+5. Set `ENVIRONMENT=production` to enable production-mode behaviors.
 
 ## Environment Variables Reference
 
@@ -95,14 +94,7 @@ If neither is set, the server uses in-memory session storage (suitable for singl
 | `SECURITY_HEADERS_ENABLED` | `true` | Enable security headers (helmet) |
 | `HSTS_MAX_AGE` | `31536000` | HSTS max-age in seconds (1 year) |
 
-### Donations
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DONATION_CHECKOUT_PROVIDER` | `PAYPAL` | Payment provider: `PAYPAL` or `STRIPE` |
-| `DONATION_MIN_AMOUNT` | `1` | Minimum donation amount in USD |
-| `DONATION_MAX_AMOUNT` | `10000` | Maximum donation amount in USD |
-| `PAYPAL_MODE` | `sandbox` | PayPal environment: `sandbox` or `live` |
 
 ## Usage examples
 
