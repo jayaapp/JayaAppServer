@@ -33,15 +33,28 @@ const defaultRedact = [
 const extra = (config.SENSITIVE_KEYS || []).map(k => k).filter(Boolean);
 const redactPaths = defaultRedact.concat(extra.map(k => `payload.${k}`)).concat(extra.map(k => `req.headers.${k}`));
 
-// Configure logging: write to logs/server.log (file transport for production)
+// Configure logging: write to logs/server.log with rotation
 const logLevel = (config.LOG_LEVEL || 'info').toLowerCase();
 const logFile = path.join(logsDir, 'server.log');
+const logRotationEnabled = (config.LOG_ROTATION_ENABLED || 'true') === 'true';
+const logRotationFrequency = config.LOG_ROTATION_FREQUENCY || 'daily';
+const logRotationSize = config.LOG_ROTATION_SIZE || '10m';
+const logRotationLimit = parseInt(config.LOG_ROTATION_LIMIT_COUNT || '30', 10);
 
 const logger = pino({
   level: logLevel,
   timestamp: pino.stdTimeFunctions.isoTime,  // Human-readable ISO timestamps
   redact: { paths: redactPaths, censor: '***REDACTED***' },
-  transport: {
+  transport: logRotationEnabled ? {
+    target: 'pino-roll',
+    options: {
+      file: logFile,
+      frequency: logRotationFrequency,
+      size: logRotationSize,
+      limit: { count: logRotationLimit },
+      mkdir: true
+    }
+  } : {
     target: 'pino/file',
     options: { destination: logFile, mkdir: true }
   }
