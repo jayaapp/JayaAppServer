@@ -1,6 +1,6 @@
 **JayaAppServer Technical Reference**
 
-This document provides technical architecture details, database schema, and deployment notes for the Node.js Fastify backend. For quick start and API documentation, see [README.md](README.md). For security configuration, see [SECURE_SECRETS.md](SECURE_SECRETS.md).
+This document provides technical architecture details, database schema, and deployment notes for the Node.js Fastify backend. For quick start and API documentation, see [README.md](README.md). For security configuration, see [SECRETS.md](SECRETS.md).
 
 ## Runtime & Framework
 
@@ -38,7 +38,7 @@ JayaAppServer/
 │       └── ollama_keys_encryption.js # AES-GCM encryption
 ├── tests/                # Test files
 ├── README.md             # Quick start and API docs
-├── SECURE_SECRETS.md     # Security configuration
+├── SECRETS.md     # Security configuration
 └── SPECS.md              # This file
 ```
 

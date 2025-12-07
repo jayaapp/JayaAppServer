@@ -5,7 +5,7 @@ This folder contains a Fastify-based backend for JayaApp, providing OAuth authen
 
 ## Quick Start (Development)
 
-1. Ensure `../JayaAppSecrets/environment.env` exists with required variables (see [SECURE_SECRETS.md](SECURE_SECRETS.md) for details).
+1. Ensure `../JayaAppSecrets/environment.env` exists with required variables (see [SECRETS.md](SECRETS.md) for details).
 
 2. Install dependencies:
    ```bash
@@ -66,7 +66,7 @@ The server listens on port `3000` by default. Verify with `curl http://localhost
 | `REDIS_SOCKET_PATH` or `REDIS_URL` | Redis connection for sessions/rate-limiting |
 | `OLLAMA_KEY_ENCRYPTION_KEY` | Encrypts Ollama keys (falls back to `SESSION_SECRET`) |
 
-For complete configuration reference, see [SECURE_SECRETS.md](SECURE_SECRETS.md).
+For complete configuration reference, see [SECRETS.md](SECRETS.md).
 
 ## Security
 
@@ -74,7 +74,7 @@ For complete configuration reference, see [SECURE_SECRETS.md](SECURE_SECRETS.md)
 - **CSRF**: State-changing endpoints require `X-CSRF-Token` header.
 - **Rate limiting**: Configurable per-IP limits for general and AI endpoints.
 
-For detailed security configuration and production recommendations, see [SECURE_SECRETS.md](SECURE_SECRETS.md).
+For detailed security configuration and production recommendations, see [SECRETS.md](SECRETS.md).
 
 ## Deployment Notes (Native Modules)
 
