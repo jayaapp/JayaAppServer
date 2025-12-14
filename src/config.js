@@ -35,8 +35,8 @@ const config = {
   SECURITY_HEADERS_ENABLED: getEnv('SECURITY_HEADERS_ENABLED', 'true') === 'true',
   HSTS_MAX_AGE: parseInt(getEnv('HSTS_MAX_AGE', '31536000'), 10),
   OLLAMA_KEY_ENCRYPTION_KEY: secrets.getSecret('OLLAMA_KEY_ENCRYPTION_KEY') || getEnv('OLLAMA_KEY_ENCRYPTION_KEY', ''),
-  // TrueHeart authentication backend base URL for token validation
-  TRUEHEART_BASE_URL: getEnv('TRUEHEART_BASE_URL', 'https://trueheartapps.com')
+  // TrueHeart user service URL for token validation
+  TRUEHEART_USER_URL: getEnv('TRUEHEART_USER_URL', 'https://trueheartapps.com/user')
 };
 
 // Optional list of additional sensitive keys (comma-separated) to be used by runtime
