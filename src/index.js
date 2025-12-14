@@ -41,7 +41,7 @@ const logRotationFrequency = config.LOG_ROTATION_FREQUENCY || 'daily';
 const logRotationSize = config.LOG_ROTATION_SIZE || '10m';
 const logRotationLimit = parseInt(config.LOG_ROTATION_LIMIT_COUNT || '30', 10);
 
-const logger = pino({
+const loggerConfig = {
   level: logLevel,
   timestamp: pino.stdTimeFunctions.isoTime,  // Human-readable ISO timestamps
   redact: { paths: redactPaths, censor: '***REDACTED***' },
@@ -58,11 +58,14 @@ const logger = pino({
     target: 'pino/file',
     options: { destination: logFile, mkdir: true }
   }
-});
+};
+
+// Create standalone logger instance for startup/shutdown
+const logger = pino(loggerConfig);
 
 async function build() {
   const app = fastify({
-    logger,
+    logger: loggerConfig,
     bodyLimit: 1048576, // 1MB request body limit
     trustProxy: true // Trust X-Forwarded-* headers from reverse proxy
   });
