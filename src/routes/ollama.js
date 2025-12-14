@@ -132,10 +132,12 @@ async function routes(fastify, opts) {
   // Helper: Validate TrueHeart token by calling TrueHeart backend
   async function validateTrueHeartToken(token, request) {
     try {
-      const trueheartURL = config.TRUEHEART_USER_URL || 'https://trueheartapps.com/user';
-      fastify.log.info({ trueheartURL, hasToken: !!token }, 'Attempting TrueHeart token validation');
+      // Base URL without /user, since we'll add /auth/user endpoint
+      const trueheartBaseURL = config.TRUEHEART_BASE_URL || 'https://trueheartapps.com';
+      const authEndpoint = `${trueheartBaseURL}/user/auth/user`;
+      fastify.log.info({ authEndpoint, hasToken: !!token }, 'Attempting TrueHeart token validation');
       
-      const resp = await fetch(`${trueheartURL}/auth/user`, {
+      const resp = await fetch(authEndpoint, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
