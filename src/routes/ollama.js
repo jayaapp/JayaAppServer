@@ -1,3 +1,20 @@
+/**
+ * Ollama API Routes - Multi-Auth Support
+ * 
+ * Supports multiple authentication methods for flexible user access:
+ * 1. GitHub OAuth (session-based) - for community features
+ * 2. TrueHeart authentication (Bearer token) - for core app features
+ * 
+ * Token validation:
+ * - GitHub sessions: Stored locally in session store
+ * - TrueHeart tokens: Validated against TrueHeart backend API
+ * 
+ * User identification:
+ * - GitHub: Uses github.login (username)
+ * - TrueHeart: Uses email address
+ * - Keys stored separately per user ID (no conflicts)
+ */
+
 const { Readable } = require('stream');
 const config = require('../config');
 const sessionModule = require('../plugins/session');
@@ -112,6 +129,33 @@ async function routes(fastify, opts) {
     }
   });
 
+  // Helper: Validate TrueHeart token by calling TrueHeart backend
+  async function validateTrueHeartToken(token) {
+    try {
+      const trueheartURL = config.TRUEHEART_USER_URL || 'https://trueheartapps.com/user';
+      const resp = await fetch(`${trueheartURL}/auth/user`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.email) {
+          // Return a session-like object with TrueHeart user info
+          return {
+            user: {
+              id: data.email,
+              login: data.email, // Use email as login
+              email: data.email,
+              source: 'trueheart'
+            }
+          };
+        }
+      }
+    } catch (e) {
+      request.log.warn('TrueHeart token validation failed', e.message);
+    }
+    return null;
+  }
+
   // Helper: resolve session and user login (uses same fallback logic as auth routes)
   async function getAuthenticatedUserLogin(request) {
     // Try request.session first
@@ -122,10 +166,15 @@ async function routes(fastify, opts) {
       if (auth && typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) {
         const token = auth.slice(7).trim();
         if (token) {
+          // Try local session store first (GitHub sessions)
           if (typeof fastify.getSession === 'function') {
             try { s = await fastify.getSession(token); } catch (e) { s = sessionModule._inMemory.getInMemorySession(token); }
           } else {
             s = sessionModule._inMemory.getInMemorySession(token);
+          }
+          // If no local session, try validating as TrueHeart token
+          if (!s) {
+            s = await validateTrueHeartToken(token);
           }
         }
       }
