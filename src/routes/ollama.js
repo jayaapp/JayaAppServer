@@ -130,14 +130,20 @@ async function routes(fastify, opts) {
   });
 
   // Helper: Validate TrueHeart token by calling TrueHeart backend
-  async function validateTrueHeartToken(token) {
+  async function validateTrueHeartToken(token, request) {
     try {
       const trueheartURL = config.TRUEHEART_USER_URL || 'https://trueheartapps.com/user';
+      fastify.log.info({ trueheartURL, hasToken: !!token }, 'Attempting TrueHeart token validation');
+      
       const resp = await fetch(`${trueheartURL}/auth/user`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
+      fastify.log.info({ status: resp.status, ok: resp.ok }, 'TrueHeart validation response');
+      
       if (resp.ok) {
         const data = await resp.json();
+        fastify.log.info({ hasEmail: !!data.email }, 'TrueHeart user data received');
         if (data.email) {
           // Return a session-like object with TrueHeart user info
           return {
@@ -149,9 +155,12 @@ async function routes(fastify, opts) {
             }
           };
         }
+      } else {
+        const errorText = await resp.text();
+        fastify.log.warn({ status: resp.status, error: errorText }, 'TrueHeart token validation failed');
       }
     } catch (e) {
-      request.log.warn('TrueHeart token validation failed', e.message);
+      fastify.log.warn({ error: e.message }, 'TrueHeart token validation error');
     }
     return null;
   }
@@ -174,7 +183,7 @@ async function routes(fastify, opts) {
           }
           // If no local session, try validating as TrueHeart token
           if (!s) {
-            s = await validateTrueHeartToken(token);
+            s = await validateTrueHeartToken(token, request);
           }
         }
       }
