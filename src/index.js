@@ -4,6 +4,7 @@ const fastify = require('fastify');
 const cookie = require('@fastify/cookie');
 const cors = require('@fastify/cors');
 const helmet = require('@fastify/helmet');
+const rateLimit = require('@fastify/rate-limit');
 const pino = require('pino');
 const config = require('./config');
 
@@ -72,14 +73,69 @@ async function build() {
 
   // Basic plugins
   await app.register(cookie);
+  
+  // CORS with explicit origin validation
   await app.register(cors, {
-    origin: config.FRONTEND_URLS,
-    credentials: true
+    origin: (origin, cb) => {
+      const allowedOrigins = config.FRONTEND_URLS || [];
+      
+      // Allow requests with no origin (mobile apps, server-to-server, etc.)
+      if (!origin) return cb(null, true);
+      
+      if (allowedOrigins.length === 0) {
+        // Development mode: log warning and allow
+        if (process.env.NODE_ENV !== 'production') {
+          app.log.warn({ origin }, 'CORS: No origins configured, allowing in dev mode');
+          return cb(null, true);
+        }
+        // Production mode: reject if not configured
+        return cb(new Error('CORS origin not allowed'), false);
+      }
+      
+      if (allowedOrigins.includes(origin)) {
+        return cb(null, true);
+      }
+      
+      return cb(new Error('CORS origin not allowed'), false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+    exposedHeaders: ['X-Request-Id', 'X-RateLimit-Limit', 'X-RateLimit-Remaining'],
+    maxAge: 3600
   });
+  
   // capture raw bodies for specific routes (webhooks)
   // Use our custom raw_body plugin to preserve exact bytes for webhook signature verification
   // This avoids the deprecation warning from fastify-raw-body package
   await app.register(require('./plugins/raw_body'), { bodyLimit: 1048576 });
+  
+  // Register rate limiting (global baseline, specific routes may have their own limits)
+  await app.register(rateLimit, {
+    global: true,
+    max: 100,
+    timeWindow: '1 minute',
+    cache: 5000,
+    allowList: (req) => {
+      // Whitelist localhost and configured IPs
+      const whitelist = ['127.0.0.1', '::1'];
+      if (config.RATE_LIMIT_WHITELIST) {
+        whitelist.push(...config.RATE_LIMIT_WHITELIST.split(',').map(ip => ip.trim()));
+      }
+      return whitelist.includes(req.ip);
+    },
+    addHeadersOnExceeding: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true
+    },
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true
+    }
+  });
+  
   if (config.SECURITY_HEADERS_ENABLED) {
     await app.register(helmet, { contentSecurityPolicy: false });
     
@@ -92,6 +148,16 @@ async function build() {
       reply.header('Pragma', 'no-cache');
       reply.header('Expires', '0');
       return payload;
+    });
+  }
+
+  // HTTPS enforcement in production
+  if (process.env.NODE_ENV === 'production') {
+    app.addHook('onRequest', async (request, reply) => {
+      const proto = request.headers['x-forwarded-proto'];
+      if (proto && proto !== 'https') {
+        return reply.code(301).redirect(`https://${request.hostname}${request.url}`);
+      }
     });
   }
 
