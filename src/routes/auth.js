@@ -6,9 +6,9 @@ const { createOrUpdateUser, getUserById } = require('../models/user');
 const oauthStates = new Map();
 const STATE_TTL = 10 * 60 * 1000; // 10 minutes
 
-function generateState() {
+function generateState(redirect) {
   const state = require('crypto').randomBytes(16).toString('hex');
-  oauthStates.set(state, { createdAt: Date.now() });
+  oauthStates.set(state, { createdAt: Date.now(), redirect: redirect || null });
   // schedule cleanup (unref so test processes can exit)
   const t = setTimeout(() => oauthStates.delete(state), STATE_TTL + 1000);
   if (t && typeof t.unref === 'function') t.unref();
@@ -23,9 +23,9 @@ function validateState(state) {
     oauthStates.delete(state);
     return false;
   }
-  // valid, consume it
+  // valid, consume it and return entry
   oauthStates.delete(state);
-  return true;
+  return entry;
 }
 
 const sessionModule = require('../plugins/session');
@@ -33,16 +33,18 @@ async function routes(fastify, options) {
   const { GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, FRONTEND_URL } = config;
   const csrfModule = require('../plugins/csrf');
 
-  function getRedirectUri(request) {
+  function getRedirectUri(request, frontendOverride) {
     // GitHub redirects to frontend with code, frontend then calls backend /auth/callback
-    // Use configured FRONTEND_URL or derive from request
-    const frontendBase = config.FRONTEND_URL 
-      ? config.FRONTEND_URL.replace(/\/$/, '')
-      : (() => {
-          const proto = (request.headers && (request.headers['x-forwarded-proto'] || request.headers['x-forwarded-protocol'])) || request.protocol || 'https';
-          const host = (request.headers && (request.headers['x-forwarded-host'] || request.headers.host)) || 'localhost';
-          return `${proto}://${host}`;
-        })();
+    // Prefer an explicit frontendOverride, then configured FRONTEND_URL, then derive from request
+    const frontendBase = frontendOverride
+      ? String(frontendOverride).replace(/\/$/, '')
+      : (config.FRONTEND_URL
+        ? config.FRONTEND_URL.replace(/\/$/, '')
+        : (() => {
+            const proto = (request.headers && (request.headers['x-forwarded-proto'] || request.headers['x-forwarded-protocol'])) || request.protocol || 'https';
+            const host = (request.headers && (request.headers['x-forwarded-host'] || request.headers.host)) || 'localhost';
+            return `${proto}://${host}`;
+          })());
     return `${frontendBase}/?auth=callback`;
   }
 
@@ -63,10 +65,47 @@ async function routes(fastify, options) {
   }
 
   fastify.get('/auth/login', async (request, reply) => {
-    const state = generateState();
+    // Determine desired frontend for this flow. Prefer an explicit `next` query param (if allowed),
+    // then `Origin`/`Referer` if they match the whitelist; fall back to configured FRONTEND_URL.
+    const requestedNext = request.query.next;
+    let chosenFrontendBase = null;
+    let redirectToForState = null;
+
+    if (requestedNext && isAllowedRedirect(requestedNext)) {
+      redirectToForState = requestedNext;
+      try {
+        if (requestedNext.startsWith('/')) {
+          // relative paths: use configured FRONTEND_URL as the origin
+          chosenFrontendBase = config.FRONTEND_URL || null;
+        } else {
+          chosenFrontendBase = (new URL(requestedNext)).origin;
+        }
+      } catch (e) {
+        chosenFrontendBase = config.FRONTEND_URL || null;
+      }
+    } else {
+      const originHeader = request.headers && (request.headers.origin || request.headers.referer);
+      if (originHeader) {
+        try {
+          const parsed = new URL(originHeader);
+          const origin = parsed.origin;
+          const origins = (config.FRONTEND_URLS || []).map(s => { try { return (new URL(s)).origin; } catch (e) { return s.replace(/\/$/, ''); } });
+          if (origins.includes(origin)) {
+            chosenFrontendBase = origin;
+            redirectToForState = origin + '/';
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+      }
+    }
+
+    if (!redirectToForState) redirectToForState = (config.FRONTEND_URL || '/');
+
+    const state = generateState(redirectToForState);
     const params = new URLSearchParams({
       client_id: GITHUB_CLIENT_ID,
-      redirect_uri: getRedirectUri(request),
+      redirect_uri: getRedirectUri(request, chosenFrontendBase),
       scope: 'read:user,user:email',
       state
     });
@@ -81,7 +120,8 @@ async function routes(fastify, options) {
 
   fastify.get('/auth/callback', async (request, reply) => {
     const { code, state } = request.query;
-    if (!code || !state || !validateState(state)) {
+    const stateEntry = validateState(state);
+    if (!code || !state || !stateEntry) {
       reply.code(400);
       return { status: 'error', message: 'Invalid OAuth state or missing code' };
     }
@@ -187,7 +227,7 @@ async function routes(fastify, options) {
 
       // redirect to frontend or return JSON
       const requestedNext = request.query.next;
-      const redirectTo = (requestedNext && isAllowedRedirect(requestedNext)) ? requestedNext : (FRONTEND_URL || '/');
+      const redirectTo = (requestedNext && isAllowedRedirect(requestedNext)) ? requestedNext : (stateEntry.redirect || FRONTEND_URL || '/');
       if (request.query.as === 'redirect') {
         reply.redirect(redirectTo);
         return;

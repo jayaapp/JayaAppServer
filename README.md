@@ -36,6 +36,12 @@ The server listens on port `3000` by default. Verify with `curl http://localhost
 | GET | `/auth/user` | Returns logged-in user info and CSRF token |
 | POST | `/auth/logout` | Clears session (requires CSRF token) |
 
+Notes on redirect handling:
+- The server accepts an optional `next` query parameter on `/auth/login` to request a specific frontend callback/redirect URL for this OAuth flow (for example: `/auth/login?next=https%3A%2F%2Fyourapp.example.com%2F%3Fauth%3Dcallback`).
+- The `next` value is strictly validated against the configured `FRONTEND_URL` whitelist; only exact origin matches (scheme+host[+port]) are allowed. If valid, the server will use the provided origin as the `redirect_uri` sent to GitHub and will store the chosen redirect with the OAuth `state` so the same target is used after callback.
+- If `next` is missing or invalid, the server falls back to the primary configured `FRONTEND_URL` (the first entry in the comma-separated list) or derives an origin from the incoming request when appropriate.
+- Frontend apps should URL-encode the `next` parameter and may send `next=${encodeURIComponent(window.location.origin + '/?auth=callback')}` when initiating OAuth to ensure the callback returns to the initiating frontend.
+
 ### Ollama API Keys
 
 | Method | Endpoint | Description |
