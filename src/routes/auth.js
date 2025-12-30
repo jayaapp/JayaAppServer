@@ -6,9 +6,9 @@ const { createOrUpdateUser, getUserById } = require('../models/user');
 const oauthStates = new Map();
 const STATE_TTL = 10 * 60 * 1000; // 10 minutes
 
-function generateState(redirect) {
+function generateState(redirect, clientIndex) {
   const state = require('crypto').randomBytes(16).toString('hex');
-  oauthStates.set(state, { createdAt: Date.now(), redirect: redirect || null });
+  oauthStates.set(state, { createdAt: Date.now(), redirect: redirect || null, clientIndex: (typeof clientIndex === 'number') ? clientIndex : 0 });
   // schedule cleanup (unref so test processes can exit)
   const t = setTimeout(() => oauthStates.delete(state), STATE_TTL + 1000);
   if (t && typeof t.unref === 'function') t.unref();
@@ -101,10 +101,23 @@ async function routes(fastify, options) {
     }
 
     if (!redirectToForState) redirectToForState = (config.FRONTEND_URL || '/');
+    // determine index of chosen frontend in configured FRONTEND_URLS to pick matching GitHub app
+    let chosenIndex = 0;
+    try {
+      const origins = (config.FRONTEND_URLS || []).map(s => { try { return (new URL(s)).origin; } catch (e) { return s.replace(/\/$/, ''); } });
+      if (chosenFrontendBase) {
+        const idx = origins.indexOf(chosenFrontendBase);
+        if (idx >= 0) chosenIndex = idx;
+      }
+    } catch (e) {
+      chosenIndex = 0;
+    }
 
-    const state = generateState(redirectToForState);
+    const state = generateState(redirectToForState, chosenIndex);
+    // pick client_id for this flow (support arrays or single value fallback)
+    const clientIdForFlow = (Array.isArray(config.GITHUB_CLIENT_IDS) && config.GITHUB_CLIENT_IDS[chosenIndex]) || config.GITHUB_CLIENT_ID || '';
     const params = new URLSearchParams({
-      client_id: GITHUB_CLIENT_ID,
+      client_id: clientIdForFlow,
       redirect_uri: getRedirectUri(request, chosenFrontendBase),
       scope: 'read:user,user:email',
       state
@@ -128,10 +141,15 @@ async function routes(fastify, options) {
 
     // Exchange code for access token
     try {
+      // determine which GitHub client secret to use for this flow
+      const clientIndexForFlow = (stateEntry && typeof stateEntry.clientIndex === 'number') ? stateEntry.clientIndex : 0;
+      const clientIdForFlow = (Array.isArray(config.GITHUB_CLIENT_IDS) && config.GITHUB_CLIENT_IDS[clientIndexForFlow]) || config.GITHUB_CLIENT_ID || '';
+      const clientSecretForFlow = (Array.isArray(config.GITHUB_CLIENT_SECRETS) && config.GITHUB_CLIENT_SECRETS[clientIndexForFlow]) || config.GITHUB_CLIENT_SECRET || '';
+
       const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
         method: 'POST',
         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, client_secret: GITHUB_CLIENT_SECRET, code })
+        body: JSON.stringify({ client_id: clientIdForFlow, client_secret: clientSecretForFlow, code })
       });
       // parse JSON body when possible
       let tokenJson = null;

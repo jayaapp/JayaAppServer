@@ -21,9 +21,18 @@ function getEnv(key, defaultValue) {
 const FRONTEND_URLS_RAW = getEnv('FRONTEND_URL', 'http://localhost:8000');
 const FRONTEND_URLS = FRONTEND_URLS_RAW.split(',').map(s => s.trim()).filter(Boolean);
 
+// Support multiple GitHub OAuth apps (comma-separated lists matching FRONTEND_URLS order)
+const GITHUB_CLIENT_IDS_RAW = getEnv('GITHUB_CLIENT_ID', '');
+const GITHUB_CLIENT_IDS = GITHUB_CLIENT_IDS_RAW.split(',').map(s => s.trim()).filter(Boolean);
+const GITHUB_CLIENT_SECRETS_RAW = getEnv('GITHUB_CLIENT_SECRET', '');
+const GITHUB_CLIENT_SECRETS = GITHUB_CLIENT_SECRETS_RAW.split(',').map(s => s.trim()).filter(Boolean);
+
 const config = {
   GITHUB_CLIENT_ID: getEnv('GITHUB_CLIENT_ID', ''),
   GITHUB_CLIENT_SECRET: getEnv('GITHUB_CLIENT_SECRET', ''),
+  // Arrays (optional): if provided, indexes align with FRONTEND_URLS
+  GITHUB_CLIENT_IDS,
+  GITHUB_CLIENT_SECRETS,
   // Prefer secrets.getSecret for sensitive values but fall back to envs (existing behavior preserved)
   SESSION_SECRET: secrets.getSecret('SESSION_SECRET') || getEnv('SESSION_SECRET', ''),
   FRONTEND_URLS,
