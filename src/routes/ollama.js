@@ -37,6 +37,23 @@ function validateChatRequest(body) {
   return [true, ''];
 }
 
+// Validation for OCR vision requests
+function validateOcrRequest(body) {
+  if (!body || typeof body !== 'object') return [false, 'Invalid request body'];
+  const { model, prompt, image } = body;
+  
+  if (!model || typeof model !== 'string') return [false, 'Model name is required'];
+  if (model.length > 100) return [false, 'Model name too long'];
+  
+  if (!prompt || typeof prompt !== 'string') return [false, 'Prompt is required'];
+  if (prompt.length > 10000) return [false, 'Prompt too long (max 10KB)'];
+  
+  if (!image || typeof image !== 'string') return [false, 'Image (base64) is required'];
+  if (image.length > 10000000) return [false, 'Image too large (max ~10MB base64)'];
+  
+  return [true, ''];
+}
+
 async function routes(fastify, opts) {
   // Use Ollama cloud API base (per reference implementation)
   const targetBase = 'https://ollama.com';
@@ -124,6 +141,99 @@ async function routes(fastify, opts) {
       }
     } catch (err) {
       request.log.warn('Ollama proxy error', err && err.message ? err.message : err);
+      reply.code(502);
+      return { status: 'error', message: 'Failed to reach Ollama server' };
+    }
+  });
+
+  fastify.post('/ollama/proxy-ocr', async (request, reply) => {
+    // Require authentication and CSRF protection
+    if (typeof fastify.csrfProtection === 'function') {
+      await fastify.csrfProtection(request, reply);
+      if (reply.sent) return;
+    }
+    const authLogin = await getAuthenticatedUserLogin(request);
+    if (!authLogin) {
+      reply.code(401);
+      return { status: 'error', message: 'unauthorized' };
+    }
+    
+    // Enforce per-IP AI limiter
+    const aiLimiter = require('../plugins/aiRateLimit');
+    if (typeof fastify.aiRateLimitCheck === 'function') {
+      const maybe = await fastify.aiRateLimitCheck(request, reply);
+      if (reply.sent) return;
+    } else if (aiLimiter && typeof aiLimiter.aiRateLimitCheck === 'function') {
+      const maybe = await aiLimiter.aiRateLimitCheck(request, reply);
+      if (reply.sent) return;
+    }
+    
+    // Validate OCR request body
+    let body = request.body;
+    const [ok, errMsg] = validateOcrRequest(body);
+    if (!ok) {
+      reply.code(400);
+      return { status: 'error', message: errMsg };
+    }
+
+    // Retrieve user's stored Ollama API key
+    const [keySuccess, ollamaApiKey, keyMessage] = getKey(authLogin);
+    if (!keySuccess || !ollamaApiKey) {
+      reply.code(401);
+      return { status: 'error', message: 'No API key configured. Please add your Ollama API key in settings.' };
+    }
+
+    // Build vision API request with image in messages array
+    const visionRequest = {
+      model: body.model,
+      messages: [
+        {
+          role: 'user',
+          content: body.prompt,
+          images: [body.image] // base64 encoded image
+        }
+      ],
+      stream: false
+    };
+
+    // Build outgoing headers with user's API key
+    const forwardHeaders = { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ollamaApiKey}`
+    };
+
+    const targetUrl = `${targetBase}${targetPath}`;
+    try {
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers: forwardHeaders,
+        body: JSON.stringify(visionRequest)
+      });
+
+      // Forward status codes
+      try {
+        reply.code(res && typeof res.status === 'number' ? res.status : 200);
+      } catch (e) {
+        reply.code(200);
+      }
+
+      // Forward content-type header
+      let ct = null;
+      if (res && res.headers && typeof res.headers.get === 'function') {
+        try { ct = res.headers.get('content-type'); } catch (e) { ct = null; }
+      }
+      if (ct) reply.header('Content-Type', ct);
+
+      // Read and parse response
+      const txt = await res.text();
+      try {
+        const parsed = JSON.parse(txt);
+        return parsed;
+      } catch (e) {
+        return txt;
+      }
+    } catch (err) {
+      request.log.warn('Ollama OCR proxy error', err && err.message ? err.message : err);
       reply.code(502);
       return { status: 'error', message: 'Failed to reach Ollama server' };
     }
