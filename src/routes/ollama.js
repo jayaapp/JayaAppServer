@@ -280,9 +280,9 @@ async function routes(fastify, opts) {
 
   // Helper: resolve session and user login (uses same fallback logic as auth routes)
   async function getAuthenticatedUserLogin(request) {
-    // Try request.session first
+    // Try request.session first (only if it has a valid user)
     let s = request.session;
-    if (!s) {
+    if (!s || !s.user) {
       // try Authorization: Bearer token
       const auth = request.headers && request.headers.authorization;
       if (auth && typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) {
