@@ -4,8 +4,8 @@
   "description": "Fastify backend for JayaApp (OAuth + Ollama)",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "NODE_ENV=development node src/index.js",
+    "start": "node --max-old-space-size=1024 src/index.js",
+    "dev": "NODE_ENV=development node --max-old-space-size=1024 src/index.js",
     "lint": "",
     "test": "node tests/test_oauth.js && node tests/test_db.js && node tests/test_logout_csrf.js && node tests/test_ollama_keys.js && node tests/test_ai_rate_limit.js && node tests/test_cookie_and_csrf_attrs.js"
   },

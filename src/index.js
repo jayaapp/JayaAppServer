@@ -27,7 +27,9 @@ const defaultRedact = [
   'payload.password',
   'payload.token',
   'payload.session_token',
-  'params.password'
+  'params.password',
+  'req.body.image', // Redact huge base64 images from logs
+  'body.image'      // Redact huge base64 images from logs
 ];
 
 // Extend redact paths with any configured sensitive keys (map to object keys and shallow paths)

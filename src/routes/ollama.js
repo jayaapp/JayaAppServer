@@ -46,10 +46,10 @@ function validateOcrRequest(body) {
   if (model.length > 100) return [false, 'Model name too long'];
   
   if (!prompt || typeof prompt !== 'string') return [false, 'Prompt is required'];
-  if (prompt.length > 10000) return [false, 'Prompt too long (max 10KB)'];
+  if (prompt.length > 50000) return [false, 'Prompt too long (max 50KB)'];
   
   if (!image || typeof image !== 'string') return [false, 'Image (base64) is required'];
-  if (image.length > 10000000) return [false, 'Image too large (max ~10MB base64)'];
+  if (image.length > 50000000) return [false, 'Image too large (max ~50MB base64)'];
   
   return [true, ''];
 }
@@ -147,8 +147,8 @@ async function routes(fastify, opts) {
   });
 
   fastify.post('/ollama/proxy-ocr', {
-    // Increase body limit for image uploads (10MB) to prevent 413 or 503 errors
-    bodyLimit: 10485760 
+    // Increase body limit for image uploads to 50MB to prevent 413 or crashes with high-res images
+    bodyLimit: 52428800 
   }, async (request, reply) => {
     // Require authentication and CSRF protection
     if (typeof fastify.csrfProtection === 'function') {
@@ -199,6 +199,9 @@ async function routes(fastify, opts) {
       stream: false
     };
 
+    // Explicitly nullify body to free memory
+    body = null;
+
     // Build outgoing headers with user's API key
     const forwardHeaders = { 
       'Content-Type': 'application/json',
@@ -207,11 +210,21 @@ async function routes(fastify, opts) {
 
     const targetUrl = `${targetBase}${targetPath}`;
     try {
+      request.log.info({ model: body.model, contentLength: body.image ? body.image.length : 0 }, 'Proxying OCR request to Ollama');
+      
+      // Use efficient stream-based upload if possible, or just stringify carefully
+      const payloadString = JSON.stringify(visionRequest);
+      
+      // Explicitly release internal object structure before allocation of payloadString
+      // (Though JS engine optimization makes this tricky to force)
+      
       const res = await fetch(targetUrl, {
         method: 'POST',
         headers: forwardHeaders,
-        body: JSON.stringify(visionRequest)
+        body: payloadString
       });
+      
+      request.log.info({ status: res.status }, 'Ollama OCR response received');
 
       // Forward status codes
       try {
