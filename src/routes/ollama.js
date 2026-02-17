@@ -199,6 +199,10 @@ async function routes(fastify, opts) {
       stream: false
     };
 
+    // Log before nullifying body
+    const imageLength = body.image ? body.image.length : 0;
+    const modelName = body.model;
+    
     // Explicitly nullify body to free memory
     body = null;
 
@@ -210,7 +214,7 @@ async function routes(fastify, opts) {
 
     const targetUrl = `${targetBase}${targetPath}`;
     try {
-      request.log.info({ model: body.model, contentLength: body.image ? body.image.length : 0 }, 'Proxying OCR request to Ollama');
+      request.log.info({ model: modelName, imageLength }, 'Proxying OCR request to Ollama');
       
       // Use efficient stream-based upload if possible, or just stringify carefully
       const payloadString = JSON.stringify(visionRequest);
@@ -249,7 +253,7 @@ async function routes(fastify, opts) {
         return txt;
       }
     } catch (err) {
-      request.log.warn('Ollama OCR proxy error', err && err.message ? err.message : err);
+      request.log.error({ err, message: err.message, stack: err.stack }, 'Ollama OCR proxy error');
       reply.code(502);
       return { status: 'error', message: 'Failed to reach Ollama server' };
     }
