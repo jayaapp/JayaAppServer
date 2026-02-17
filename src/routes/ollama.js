@@ -230,6 +230,25 @@ async function routes(fastify, opts) {
       
       request.log.info({ status: res.status }, 'Ollama OCR response received');
 
+      // Handle non-success status codes explicitly
+      if (!res.ok) {
+        const errorText = await res.text();
+        request.log.warn({ status: res.status, error: errorText }, 'Ollama returned error');
+        
+        // Return user-friendly error messages
+        let errorMessage = 'Ollama API error';
+        if (res.status === 404) {
+          errorMessage = `Model '${modelName}' not found. Please check if the model exists in your Ollama Cloud account or try 'llama3.2-vision' instead.`;
+        } else if (res.status === 401 || res.status === 403) {
+          errorMessage = 'Invalid or unauthorized Ollama API key';
+        } else {
+          errorMessage = `Ollama error ${res.status}: ${errorText}`;
+        }
+        
+        reply.code(502);
+        return { status: 'error', message: errorMessage };
+      }
+
       // Forward status codes
       try {
         reply.code(res && typeof res.status === 'number' ? res.status : 200);
@@ -250,6 +269,7 @@ async function routes(fastify, opts) {
         const parsed = JSON.parse(txt);
         return parsed;
       } catch (e) {
+        request.log.warn({ parseError: e.message }, 'Failed to parse Ollama response as JSON');
         return txt;
       }
     } catch (err) {
