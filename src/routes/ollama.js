@@ -146,7 +146,10 @@ async function routes(fastify, opts) {
     }
   });
 
-  fastify.post('/ollama/proxy-ocr', async (request, reply) => {
+  fastify.post('/ollama/proxy-ocr', {
+    // Increase body limit for image uploads (10MB) to prevent 413 or 503 errors
+    bodyLimit: 10485760 
+  }, async (request, reply) => {
     // Require authentication and CSRF protection
     if (typeof fastify.csrfProtection === 'function') {
       await fastify.csrfProtection(request, reply);
